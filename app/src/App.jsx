@@ -27,7 +27,7 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <Button onClick={doActionOnServer}>Press Me</Button>
+        <Button onClick={doActionOnServer}>Press Me NOw</Button>
       </header>
     </div>
   )
