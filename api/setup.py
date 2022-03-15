@@ -5,7 +5,7 @@ from setuptools import find_packages, setup
 packages = [
     "uvicorn[standard]==0.15.0",
     "gunicorn==20.1.0",
-    "fastapi==0.68.1",
+    "fastapi",
     "requests==2.27.1",
     "aiofiles",
 ]
