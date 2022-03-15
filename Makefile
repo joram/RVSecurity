@@ -1,16 +1,16 @@
 
 setup:
 	cd api; pip install .[dev]
-	cd app; yarn install
+	cd app; npm install
 
 build:
-	cd app; yarn build
+	cd app; npm build
 	mv ./build ../api/
 
 start_api:
-	cd api; uvicorn server:app --reload
+	cd api; ./server.py
 
 start_app:
-	cd app; yarn start
+	cd app; npm start
 
 
