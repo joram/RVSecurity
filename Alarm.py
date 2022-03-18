@@ -6,8 +6,10 @@ class States(Enum):
     OFF         = 1
     ON          = 2
     STARTING    = 3
-    TRIGGERED   = 4
-    SILENCED    = 5
+    STARTERROR  = 4
+    TRIGDELAY   = 5
+    TRIGGERED   = 6
+    SILENCED    = 7
 
 class AlarmIO:
 
@@ -18,31 +20,45 @@ class AlarmIO:
         TINK.setMODE(TinkAddr,3,'BUTTON')  # Blue Button
         TINK.setMODE(TinkAddr,4,'DOUT')    # Blue LED
         TINK.setMODE(TinkAddr,5,'DIN')     # PIR interior sensor 
+        TINK.setMODE(TinkAddr,6,'DOUT')    # Surrogate for Alarm horn
+        TINK.clrLED(TinkAddr,0)            # Note LED0 is surrogate for buzzer 
+        TINK.clrDOUT(TinkAddr,2)
+        TINK.clrDOUT(TinkAddr,4)
+        TINK.clrDOUT(TinkAddr,6)
+        TINK.relayOFF(TinkAddr,1)
+        TINK.relayOFF(TinkAddr,2)
+        
         AlarmState["BikeState"] = States.OFF
         AlarmState["InteriorState"] = States.OFF
      
-    def CheckBikeWire(self,TinkAddr, AlarmState):
+    def CheckBikeWire(self,TinkAddr, AlarmState, LoopCount, LoopTime):
         VOL_DELTA = .2              #Allowed voltage delta in trip wire
-        if AlarmState["BikeState"] == States.ON:
+        if (AlarmState["BikeState"] == States.ON) or (AlarmState["BikeState"] == States.STARTING):
             Chan1_Base = TINK.getADC(TinkAddr,1)    #This measures the 5V supply used to generate Chan3_Base and Chan4_Base 
             Chan3_Base = Chan1_Base * 0.6666        #ratio set by resistive divider
             Chan4_Base = Chan1_Base * 0.3333
             Chan3 = abs(TINK.getADC(TinkAddr,3) - Chan3_Base)
             Chan4 = abs(TINK.getADC(TinkAddr,4) - Chan4_Base)
-            if (Chan3 > VOL_DELTA or Chan4 > VOL_DELTA):
-                # Alarm triggered
-                AlarmState["AlarmTime"] = LoopTime
-                AlarmState["BikeState"] = States.TRIGGERED
+            if (Chan3 > VOL_DELTA) or (Chan4 > VOL_DELTA):
+                # Error detected 
+                if(AlarmState["BikeState"] == States.STARTING):
+                    # Starting errror
+                    AlarmState["BikeState"] = States.STARTERROR 
+                else:
+                    # Alarm triggere; 
+                    AlarmState["AlarmTime"] = LoopTime
+                    AlarmState["BikeState"] = States.TRIGGERED   #Note: Bike has no alarm triggered delay.
 
-    def CheckInterior(self, TinkAddr, AlarmState):
-        global LoopTime
+    def CheckInterior(self, TinkAddr, AlarmState, LoopCount, LoopTime):
+        if AlarmState["InteriorState"] == States.STARTING and TINK.getDIN(TinkAddr, 5) == 1:
+            #Alarm triggered but starting
+             AlarmState["InteriorState"] = States.STARTERROR
         if AlarmState["InteriorState"] == States.ON and TINK.getDIN(TinkAddr, 5) == 1:
             #Alarm triggered
             AlarmState["AlarmTime"] = LoopTime
-            AlarmState["InteriorState"] = States.TRIGGERED
+            AlarmState["InteriorState"] = States.TRIGDELAY
 
-    def CheckButtons(self, TinkAddr, AlarmState):
-        global LoopTime
+    def CheckButtons(self, TinkAddr, AlarmState, LoopCount, LoopTime):
         BUTTONDELAY = 1             # Time (sec) before button toggles
 
         NowTime = LoopTime
@@ -67,110 +83,143 @@ class AlarmIO:
                 AlarmState["BikeState"] = States.OFF
             AlarmState["LastButtonTime"] = LoopTime
 
-    def Blink(self, TinkAddr, SpeedDiv, RedLight, BlueLight, Buzzer, Horn):
+    def Display(self, TinkAddr, AlarmState, LoopCount, LoopTime):
     #note: horn is relay 1 and buzzer is relay 2
-        global LoopCount
-        if (LoopCount % SpeedDiv) == 0:
-            if RedLight:
-                TINK.toggleDOUT(TinkAddr,2)
-            if BlueLight:
-                TINK.toggleDOUT(TinkAddr,4)
-            if Horn:
-                TINK.relayTOGGLE(TinkAddr,1)
-                TINK.toggleLED(TinkAddr,0)
-            if Buzzer:
-                TINK.relayTOGGLE(TinkAddr,2)
-    
+
+        global FASTBLINK 
+        global SLOWBLINK
+        
+
+        InteriorState = StateConsts[AlarmState["InteriorState"]]
+        BikeState     = StateConsts[AlarmState["BikeState"]]
+        if InteriorState[0] == 0:
+            TINK.clrDOUT(TinkAddr,2) #Red light off
+        elif InteriorState[0] == 1:
+            TINK.setDOUT(TinkAddr,2) #Red light off
+        if BikeState[0] == 0:
+            TINK.clrDOUT(TinkAddr,4) #Blue light off
+        elif BikeState[0] == 1:
+            TINK.setDOUT(TinkAddr,4) #Blue light off
+        
+        # Combined Buzzer and Alarm values
+        BuzzerVal = InteriorState[1] + BikeState[1]
+        AlarmVal = InteriorState[2] + BikeState[2]
+
+        if BuzzerVal == 0:
+            TINK.relayOFF(TinkAddr,2)
+            TINK.clrLED(TinkAddr,0)
+        elif BuzzerVal == 1:
+            TINK.relayON(TinkAddr,2)
+            TINK.setLED(TinkAddr,0)
+        
+        if AlarmVal == 0:
+            TINK.relayOFF(TinkAddr,1)
+            TINK.clrDOUT(TinkAddr,6)
+        elif AlarmVal == 1:
+            TINK.relayON(TinkAddr,1)
+            TINK.setLED(TinkAddr,6)
+
+        if (BuzzerVal > 1 or AlarmVal > 1 or InteriorState[0] > 1 or BikeState[0] > 1):
+             # Someone needs to toggle now
+            if LoopCount % SLOWBLINK == 0:
+            
+                if InteriorState[0] > 2:            # Red Light
+                    TINK.toggleDOUT(TinkAddr,2)
+                if BikeState[0] > 2:                # Blue Light
+                    TINK.toggleDOUT(TinkAddr,4)
+                if BuzzerVal > 2:
+                    TINK.relayTOGGLE(TinkAddr,2)
+                    TINK.toggleLED(TinkAddr,0)
+                if AlarmVal > 2:
+                    TINK.relayTOGGLE(TinkAddr,1)
+                    TINK.toggleLED(TinkAddr,6)
+            elif (LoopCount % FASTBLINK) == 0:
+                if InteriorState[0] > 8:            # Red Light
+                    TINK.toggleDOUT(TinkAddr,2)
+                if BikeState[0] > 8:                # Blue Light
+                    TINK.toggleDOUT(TinkAddr,4)
+                if BuzzerVal > 8:
+                    TINK.relayTOGGLE(TinkAddr,2)
+                    # TINK.toggleLED(TinkAddr,0)
+                if AlarmVal > 8:
+                    TINK.relayTOGGLE(TinkAddr,1)
+                    TINK.toggleLED(TinkAddr,6)
+                
+
        
-    def UpdateStateAnnouncements(self, TinkAddr, AlarmState):
+    def UpdateTimedTransitions(self, TinkAddr, AlarmState, LoopCount, LoopTime):
     # Three announcement assets: button light (red and blue), buzzer, and alarm horn
     # Note: buzzer and alarm horn are shared by both alarm circuits
-        SLOWBLINK = 5
-        FASTBLINK = 1
-        EXITDELAY = 30 
 
-        global LoopTime
-       
+        global ENTRYEXITDELAY
+        global MAXALARMTIME
+
         Inside = AlarmState["InteriorState"]
-        if Inside == States.OFF:
-            TINK.clrDOUT(TinkAddr,2) #Red light off
-        elif Inside == States.STARTING:
-            #slow delay exit; 
-            #slow blink light and buzzer; 
-            RVIO.Blink(TinkAddr, SLOWBLINK, True, False, True, False)
-            if (LoopTime - AlarmState["InteriorTime"]) > EXITDELAY:
-                AlarmState["InteriorState"] = States.ON
-        elif Inside == States.ON:
-            #steady on light; horn off
-            TINK.setDOUT(TinkAddr,2) #Red light on
-        elif Inside ==  States.SILENCED:
-            #light fast blink; horn slidenced
-            RVIO.Blink(TinkAddr, FASTBLINK, True, False, False, False)
-        elif Inside ==  States.TRIGGERED:
-            #fast blink light; horn on
-            RVIO.Blink(TinkAddr, FASTBLINK, True, False, False, True)
-            if ((LoopTime - AlarmState["AlarmTime"]) > (60 * AlarmState["ALARM_MINUTES"])):
-                AlarmState["InternalState"] = States.SILENCED
+        if (Inside == States.STARTING or Inside == States.STARTERROR) and (LoopTime - AlarmState["InteriorTime"]) > ENTRYEXITDELAY:
+            AlarmState["InteriorState"] = States.ON
+        
+        elif (Inside ==  States.TRIGDELAY) and ((LoopTime - AlarmState["AlarmTime"]) > ENTRYEXITDELAY):
+            AlarmState["InternalState"] = States.TRIGGERED
+      
+        elif (Inside ==  States.TRIGGERED) and ((LoopTime - AlarmState["AlarmTime"]) > (60 * MAXALARMTIME)):
+            AlarmState["InternalState"] = States.SILENCED
        
         Bike = AlarmState["BikeState"]
-        if Bike == States.OFF:
-            TINK.clrDOUT(TinkAddr,4) #Blue light off
-        elif Bike ==States.STARTING:
-            #slow delay exit; 
-            #slow blink light and buzzer; 
-            RVIO.Blink(TinkAddr, SLOWBLINK, False, True, True, False)
-            if (LoopTime - AlarmState["BikeTime"]) > EXITDELAY:
-                print(LoopTime - AlarmState["BikeTime"],LoopTime, AlarmState["AlarmTime"])
-                AlarmState["BikeState"] = States.ON
-        elif Bike == States.ON:
-            #steady on light; horn off
-            TINK.setDOUT(TinkAddr,4) #Blue light on
-        elif Bike ==  States.SILENCED:
-            #light fast blink; horn slidenced
-            RVIO.Blink(TinkAddr, FASTBLINK, True, False, False, False)
-        elif Bike ==  States.TRIGGERED:
-            #fast blink light; horn on
-            RVIO.Blink(TinkAddr, FASTBLINK, False, True, False, True)
-            if ((LoopTime - AlarmState["AlarmTime"]) > (60 * AlarmState["ALARM_MINUTES"])):
-                AlarmState["BikeState"] = States.SILENCED
-        
-             
-
-        if(AlarmState["BikeState"] == States.TRIGGERED or AlarmState["InteriorState"] == States.TRIGGERED) and \
-          ((LoopTime - AlarmState["AlarmTime"]) < (60 * AlarmState["ALARM_MINUTES"])):
-            # Alarm on
-            TINK.setLED(TinkAddr,0)
-        else:
-            #Alarm off
-            TINK.clrLED(TinkAddr,0)
+        if (Bike == States.STARTING or Bike == States.STARTERROR) and (LoopTime - AlarmState["BikeTime"]) > ENTRYEXITDELAY:
+            AlarmState["BikeState"] = States.ON
+      
+        elif (Bike ==  States.TRIGGERED) and ((LoopTime - AlarmState["AlarmTime"]) > (60 * MAXALARMTIME)):
+            AlarmState["BikeState"] = States.SILENCED
         
 
 
+StateConsts = {
+    # Value list assignments: 1st: Light indicator state; 2nd: Buzzer State; 3rd: Alarm State
+    # Value meaning: 0 = off; 1 = on; 4 = slow blink; 16 = fast blink 
 
-LOOPDELAY = .2                  # time in seconds pausing between running loop
-TINKERADDR = 0                  # IO bd address
+    States.OFF:         [ 0,  0,  0],     
+    States.STARTING:    [ 4,  4,  0],
+    States.STARTERROR:  [16, 16,  0],
+    States.ON:          [ 1,  0,  0],
+    States.TRIGDELAY:   [16, 16,  0],
+    States.TRIGGERED:   [16, 16,  1],
+    States.SILENCED:    [16, 16,  0]
+}
+
+           
 
 AlarmState = { 
-    "ALARM_MINUTES": 1,          #Max number of minutes an alarm will ring
     "AlarmTime": 0,
     "BikeState": States.OFF,          #uses blue button
     "BikeTime": 0,
     "InteriorState": States.OFF,      #uses red button
     "InteriorTime": 0,
-    "LastButtonTime": 0               #Time button weas last pressed  
+    "LastButtonTime": 0               #Time button weas last pressed 
 }
 
+#Global Constants
+ENTRYEXITDELAY  = 30            # Time in seconds where alarm won't go off after enable
+FASTBLINK       = 1             # time delay is = FASTBLINK * LoopDelay
+SLOWBLINK       = 6 * FASTBLINK # SLOWBLINK must be a muilti9ple of FASTBLINK
+MAXALARMTIME    = 1             # Number of minutes max that the alarm can be on
+
+#Local constants
+LOOPDELAY = .3                  # time in seconds pausing between running loop
+TINKERADDR = 0                  # IO bd address
 
 RVIO = AlarmIO(TINKERADDR, AlarmState)
 LoopCount = 0
 
-
 while True:                     #infinite loop
     LoopCount += 1
     LoopTime = time.time()
-    RVIO.CheckButtons(TINKERADDR, AlarmState)    
-    RVIO.CheckBikeWire(TINKERADDR, AlarmState)
-    RVIO.CheckInterior(TINKERADDR, AlarmState)
-    RVIO.UpdateStateAnnouncements(TINKERADDR, AlarmState)
+    RVIO.CheckButtons(TINKERADDR, AlarmState, LoopCount, LoopTime)    
+    RVIO.CheckBikeWire(TINKERADDR, AlarmState, LoopCount, LoopTime)
+    RVIO.CheckInterior(TINKERADDR, AlarmState, LoopCount, LoopTime)
+    RVIO.UpdateTimedTransitions(TINKERADDR, AlarmState, LoopCount, LoopTime)
+    RVIO.Display(TINKERADDR, AlarmState, LoopCount, LoopTime)
+    #if LoopCount % 40 == 0:
+    #    print(AlarmState)
     time.sleep(LOOPDELAY) #sleep
-    
+
+   
