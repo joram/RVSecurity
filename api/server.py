@@ -8,6 +8,7 @@ from starlette.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+alarm = Alarm()
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,13 +29,12 @@ class Action1Request(BaseModel):
 
 
 class Action1Response(BaseModel):
-    msg: str
+    state: json
 
 
-@app.post("/action1")
-async def action1(request: Action1Request) -> Action1Response:
-    print(f"doing action: `{request.msg}`")
-    return Action1Response(msg=request.msg.replace("!", "?"))
+@app.post("/alarm_state")
+async def alarm_state(request: Action1Request) -> Action1Response:
+    return Action1Response(state=alarm.json())
 
 
 @app.get("/tirepressure")
@@ -45,5 +45,7 @@ async def tirepressure(tire_number: int) -> dict:
 app.mount("/", StaticFiles(directory="build"), name="ui")
 
 
+
 if __name__ == "__main__":
+    alarm.run_thread()
     uvicorn.run(app, host="0.0.0.0", port=8000)

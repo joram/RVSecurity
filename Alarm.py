@@ -11,7 +11,51 @@ class States(Enum):
     TRIGGERED   = 6
     SILENCED    = 7
 
-class AlarmIO:
+
+
+class Alarm:
+
+
+    StateConsts = {
+        # Value list assignments: 1st: Light indicator state; 2nd: Buzzer State; 3rd: Alarm State
+        # Value meaning: 0 = off; 1 = on; 4 = slow blink; 16 = fast blink 
+
+        States.OFF:         [ 0,  0,  0],     
+        States.STARTING:    [ 4,  4,  0],
+        States.STARTERROR:  [16, 16,  0],
+        States.ON:          [ 1,  0,  0],
+        States.TRIGDELAY:   [16, 16,  0],
+        States.TRIGGERED:   [16, 16,  1],
+        States.SILENCED:    [16, 16,  0]
+    }
+
+            
+    alarm_time: float = 0 
+    bike_state: States = States.OFF
+
+
+    AlarmState = { 
+        "AlarmTime": 0,
+        "BikeState": States.OFF,          #uses blue button
+        "BikeTime": 0,
+        "InteriorState": States.OFF,      #uses red button
+        "InteriorTime": 0,
+        "LastButtonTime": 0               #Time button weas last pressed 
+    }
+
+    #Global Constants
+    ENTRYEXITDELAY  = 30            # Time in seconds where alarm won't go off after enable
+    FASTBLINK       = 1             # time delay is = FASTBLINK * LoopDelay
+    SLOWBLINK       = 6 * FASTBLINK # SLOWBLINK must be a muilti9ple of FASTBLINK
+    MAXALARMTIME    = 1             # Number of minutes max that the alarm can be on
+
+    #Local constants
+    LOOPDELAY = .3 # time in seconds pausing between running loop
+    TINKERADDR = 0 # IO bd address
+
+    RVIO = AlarmIO(TINKERADDR, AlarmState)
+    LoopCount = 0
+
 
     def __init__(self,TinkAddr, AlarmState):
         ## Basic setup   
@@ -28,12 +72,19 @@ class AlarmIO:
         TINK.relayOFF(TinkAddr,1)
         TINK.relayOFF(TinkAddr,2)
         
-        AlarmState["BikeState"] = States.OFF
-        AlarmState["InteriorState"] = States.OFF
-     
-    def CheckBikeWire(self,TinkAddr, AlarmState, LoopCount, LoopTime):
+        self.bike_state = States.OFF
+        self.interior_state = States.OFF
+
+    def json(self): {
+        return {
+            "alarm_time": self.alarm_time,
+            "bike_state": self.bike_state,
+        }
+    }
+         
+    def _check_bike_wire(self,TinkAddr, AlarmState, LoopCount, LoopTime):
         VOL_DELTA = .2              #Allowed voltage delta in trip wire
-        if (AlarmState["BikeState"] == States.ON) or (AlarmState["BikeState"] == States.STARTING):
+        if self.bike_state in [States.ON, States.STARTING]:
             Chan1_Base = TINK.getADC(TinkAddr,1)    #This measures the 5V supply used to generate Chan3_Base and Chan4_Base 
             Chan3_Base = Chan1_Base * 0.6666        #ratio set by resistive divider
             Chan4_Base = Chan1_Base * 0.3333
@@ -41,7 +92,7 @@ class AlarmIO:
             Chan4 = abs(TINK.getADC(TinkAddr,4) - Chan4_Base)
             if (Chan3 > VOL_DELTA) or (Chan4 > VOL_DELTA):
                 # Error detected 
-                if(AlarmState["BikeState"] == States.STARTING):
+                if AlarmState["BikeState"] == States.STARTING:
                     # Starting errror
                     AlarmState["BikeState"] = States.STARTERROR 
                 else:
@@ -49,7 +100,7 @@ class AlarmIO:
                     AlarmState["AlarmTime"] = LoopTime
                     AlarmState["BikeState"] = States.TRIGGERED   #Note: Bike has no alarm triggered delay.
 
-    def CheckInterior(self, TinkAddr, AlarmState, LoopCount, LoopTime):
+    def _check_interior(self, TinkAddr, AlarmState, LoopCount, LoopTime):
         if AlarmState["InteriorState"] == States.STARTING and TINK.getDIN(TinkAddr, 5) == 1:
             #Alarm triggered but starting
              AlarmState["InteriorState"] = States.STARTERROR
@@ -173,53 +224,17 @@ class AlarmIO:
         
 
 
-StateConsts = {
-    # Value list assignments: 1st: Light indicator state; 2nd: Buzzer State; 3rd: Alarm State
-    # Value meaning: 0 = off; 1 = on; 4 = slow blink; 16 = fast blink 
-
-    States.OFF:         [ 0,  0,  0],     
-    States.STARTING:    [ 4,  4,  0],
-    States.STARTERROR:  [16, 16,  0],
-    States.ON:          [ 1,  0,  0],
-    States.TRIGDELAY:   [16, 16,  0],
-    States.TRIGGERED:   [16, 16,  1],
-    States.SILENCED:    [16, 16,  0]
-}
-
-           
-
-AlarmState = { 
-    "AlarmTime": 0,
-    "BikeState": States.OFF,          #uses blue button
-    "BikeTime": 0,
-    "InteriorState": States.OFF,      #uses red button
-    "InteriorTime": 0,
-    "LastButtonTime": 0               #Time button weas last pressed 
-}
-
-#Global Constants
-ENTRYEXITDELAY  = 30            # Time in seconds where alarm won't go off after enable
-FASTBLINK       = 1             # time delay is = FASTBLINK * LoopDelay
-SLOWBLINK       = 6 * FASTBLINK # SLOWBLINK must be a muilti9ple of FASTBLINK
-MAXALARMTIME    = 1             # Number of minutes max that the alarm can be on
-
-#Local constants
-LOOPDELAY = .3                  # time in seconds pausing between running loop
-TINKERADDR = 0                  # IO bd address
-
-RVIO = AlarmIO(TINKERADDR, AlarmState)
-LoopCount = 0
-
-while True:                     #infinite loop
-    LoopCount += 1
-    LoopTime = time.time()
-    RVIO.CheckButtons(TINKERADDR, AlarmState, LoopCount, LoopTime)    
-    RVIO.CheckBikeWire(TINKERADDR, AlarmState, LoopCount, LoopTime)
-    RVIO.CheckInterior(TINKERADDR, AlarmState, LoopCount, LoopTime)
-    RVIO.UpdateTimedTransitions(TINKERADDR, AlarmState, LoopCount, LoopTime)
-    RVIO.Display(TINKERADDR, AlarmState, LoopCount, LoopTime)
-    #if LoopCount % 40 == 0:
-    #    print(AlarmState)
-    time.sleep(LOOPDELAY) #sleep
+    def run_loop_infinitely(self):
+        while True:                     #infinite loop
+            LoopCount += 1
+            LoopTime = time.time()
+            RVIO.CheckButtons(AlarmState, LoopCount, LoopTime)    
+            RVIO._check_bike_wire(TINKERADDR, AlarmState, LoopCount, LoopTime)
+            RVIO._check_interior(TINKERADDR, AlarmState, LoopCount, LoopTime)
+            RVIO.UpdateTimedTransitions(TINKERADDR, AlarmState, LoopCount, LoopTime)
+            RVIO.Display(TINKERADDR, AlarmState, LoopCount, LoopTime)
+            #if LoopCount % 40 == 0:
+            #    print(AlarmState)
+            time.sleep(LOOPDELAY) #sleep
 
    
