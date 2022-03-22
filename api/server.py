@@ -46,4 +46,5 @@ app.mount("/", StaticFiles(directory="build"), name="ui")
 
 
 if __name__ == "__main__":
+    #kick off alarm thread here
     uvicorn.run(app, host="0.0.0.0", port=8000)
