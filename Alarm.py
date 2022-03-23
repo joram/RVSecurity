@@ -11,6 +11,9 @@ class States(Enum):
     TRIGGERED   = 6
     SILENCED    = 7
 
+class AlarmTypes(Enum):
+    Interior    = 1
+    Bike        = 2
 
 
 class Alarm:
@@ -37,16 +40,15 @@ class Alarm:
     TINKERADDR      = int(0)             # IO bd address
 
     # Class variables
-    AlarmTime       = float(0)
-    BikeState       = (States.OFF)   #uses blue button
-    #BikeState       = StateConsts(States.OFF)   #uses blue button
-    BikeTime        = float(0)
-    InteriorState   = (States.OFF)   #uses red button
-    #InteriorState   = StateConsts(States.OFF)   #uses red button
-    InteriorTime    = float(0)
-    LastButtonTime  = float(0)                  #Time button weas last pressed 
-    LoopTime        = float(0)
-    LoopCount       = int(0)
+    AlarmTime: float        = 0.0
+    BikeState: States       = States.OFF   #uses blue button
+    BikeTime: float         = 0.0
+    InteriorState: States   = States.OFF   #uses red button
+    InteriorTime: float     = 0.0
+    LastButtonTime: float   = 0.0        #Time button weas last pressed 
+    LoopTime: float         = 0.0        #Time of current loop execution
+    LoopCount: int          = 0          #Simple counter of loop cycles
+
 
     def __init__(self):
         ## Basic setup   
@@ -62,11 +64,26 @@ class Alarm:
         TINK.clrDOUT(self.TINKERADDR,6)           # Surrogate Alarm horn
         TINK.relayOFF(self.TINKERADDR,1)          # Alarm Horn
         TINK.relayOFF(self.TINKERADDR,2)          # Buzzer
-
         
         self.BikeState = States.OFF
         self.InteriorState = States.OFF
      
+    def set_state(self, state_var: AlarmTypes, state_val: States):
+        if state_var == AlarmTypes.Interior:
+            self.InteriorState = state_val
+            if state_val == States.STARTING:
+                self.InteriorTime = self.LoopTime
+        else:
+            self.BikeState = state_val
+            if state_val == States.STARTING:
+                self.BikeTime = self.LoopTime
+
+    def get_state(self, state_var: AlarmTypes):
+        if state_var == AlarmTypes.Interior:
+            return(self.InteriorState)
+        else:
+            return(self.BikeState)
+         
     def _check_bike_wire(self):
         VOL_DELTA = .2              #Allowed voltage delta in trip wire
         if self.BikeState in [States.ON, States.STARTING]:
@@ -79,19 +96,23 @@ class Alarm:
                 # Error detected 
                 if(self.BikeState == States.STARTING):
                     # Starting errror
-                    self.BikeState = States.STARTERROR 
+                    #self.BikeState = States.STARTERROR
+                    self.set_state(AlarmTypes.Bike, States.STARTERROR)
                 else:
                     # Alarm triggere; 
-                    self.BikeState = States.TRIGGERED   #Note: Bike has no alarm triggered delay.
+                    #self.BikeState = States.TRIGGERED   #Note: Bike has no alarm triggered delay.
+                    self.set_state(AlarmTypes.Bike, States.TRIGGERED)
                     self.AlarmTime = self.LoopTime
 
     def _check_interior(self):
         if self.InteriorState == States.STARTING and TINK.getDIN(self.TINKERADDR, 5) == 1:
             #Alarm triggered but starting
-             self.InteriorState = States.STARTERROR
+             #self.InteriorState = States.STARTERROR
+            self.set_state(AlarmTypes.Interior, States.STARTERROR)
         if self.InteriorState == States.ON and TINK.getDIN(self.TINKERADDR, 5) == 1:
             #Alarm triggered
-            self.InteriorState = States.TRIGDELAY
+            #self.InteriorState = States.TRIGDELAY
+            self.set_state(AlarmTypes.Interior, States.TRIGDELAY)
             self.AlarmTime = self.LoopTime
 
     def _check_buttons(self):
@@ -104,19 +125,23 @@ class Alarm:
         if(RedButton == 1 and ((NowTime-self.LastButtonTime) > BUTTONDELAY)): 
             #Toggle
             if self.InteriorState == States.OFF:
-                self.InteriorState = States.STARTING
-                self.InteriorTime = NowTime
+                #self.InteriorState = States.STARTING
+                #self.InteriorTime = NowTime
+                self.set_state(AlarmTypes.Interior,States.STARTING)
             else:
-                self.InteriorState = States.OFF
+                #self.InteriorState = States.OFF
+                self.set_state(AlarmTypes.Interior,States.STARTING)
             self.LastButtonTime = NowTime
 
         if(BlueButton == 1 and ((NowTime-self.LastButtonTime) > BUTTONDELAY)): 
             #Toggle
             if self.BikeState == States.OFF:
-                self.BikeState = States.STARTING 
-                self.BikeTime = NowTime
+                #self.BikeState = States.STARTING 
+                #self.BikeTime = NowTime
+                self.set_state(AlarmTypes.Bike,States.STARTING)
             else:
-                self.BikeState = States.OFF
+                #self.BikeState = States.OFF
+                self.set_state(AlarmTypes.Bike, States.OFF)
             self.LastButtonTime = NowTime
 
     def _display(self):
@@ -186,31 +211,36 @@ class Alarm:
         
         Inside = self.InteriorState
         if Inside in [States.STARTING, States.STARTERROR] and (self.LoopTime - self.InteriorTime) > self.ENTRYEXITDELAY:
-            self.InteriorState = States.ON
-        
+            #self.InteriorState = States.ON
+            self.set_state(AlarmTypes.Interior, States.ON)
+    
         elif (Inside ==  States.TRIGDELAY) and ((self.LoopTime - self.AlarmTime) > self.ENTRYEXITDELAY):
-            self.InternalState = States.TRIGGERED
+            #self.InternalState = States.TRIGGERED
+            self.set_state(AlarmTypes.Interior, States.TRIGGERED)
       
         elif (Inside ==  States.TRIGGERED) and ((self.LoopTime - self.AlarmTime) > (60 * self.MAXALARMTIME)):
-            self.InternalState = States.SILENCED
+            #self.InternalState = States.SILENCED
+            self.set_state(AlarmTypes.Interior, States.SILENCED)   
        
         Bike = self.BikeState
         if (Bike in [States.STARTING, States.STARTERROR]) and (self.LoopTime - self.BikeTime) > self.ENTRYEXITDELAY:
-            self.BikeState = States.ON
+            #self.BikeState = States.ON
+            self.set_state(Bike, States.ON)
       
         elif (Bike ==  States.TRIGGERED) and ((self.LoopTime - self.AlarmTime) > (60 * self.MAXALARMTIME)):
-            self.BikeState = States.SILENCED
+            #self.BikeState = States.SILENCED
+            self.set_state(Bike, States.SILENCED)
     
     def run_alarm_infinite(self):
         # run alarm code forever
         while True:                    
             self.LoopCount += 1
             self.LoopTime = time.time()
-            RVIO._check_buttons()    
-            RVIO._check_bike_wire()
-            RVIO._check_interior()
-            RVIO._update_timed_transitions()
-            RVIO._display()
+            self._check_buttons()    
+            self._check_bike_wire()
+            self._check_interior()
+            self._update_timed_transitions()
+            self._display()
             #if LoopCount % 40 == 0:
             #    print(AlarmState)
             time.sleep(self.LOOPDELAY) #sleep
