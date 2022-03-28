@@ -239,7 +239,11 @@ class Alarm:
     def run_alarm_infinite(self):
         # run alarm code forever
         while True:                    
-            self.LoopCount += 1
+            if self.InteriorState == States.OFF and self.BikeState == States.OFF:
+                #don't let the LoopCount get too big
+                self.LoopCount = 1      
+            else:
+                self.LoopCount += 1
             self.LoopTime = time.time()
             self._check_buttons()    
             self._check_bike_wire()

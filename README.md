@@ -33,8 +33,7 @@ now you have a folder of code called `RVSecurity`
 ## Terminology
 - API - code that runs on the webpage server
 - Applicaiton - web code that runs on the persons computer hitting the web page 
-
-
-
+- REACT is the web framework; see https://reactjs.org/ (start here)
+- React Sematic UI:  https://react.semantic-ui.com/
 
 
