@@ -13,7 +13,7 @@ start_app:
 # Only need to start_app if changing the client code
 
 build:
-	cd app; npm run-script build
+	cd app; npm rumake n-script build
 	cd app; mv ./build ../api/
 # only requried for client code and want to merge with server
 

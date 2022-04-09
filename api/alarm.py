@@ -38,7 +38,10 @@ class Alarm:
     MAXALARMTIME    = int(1)             # Number of minutes max that the alarm can be on
     LOOPDELAY       = float(.3)          # time in seconds pausing between running loop
     TINKERADDR      = int(0)             # IO bd address
-
+    BUZZER          = 1
+    ALARMHORN       = 2
+    LOUDENABLE      = True
+    
     # Class variables
     AlarmTime: float        = 0.0
     BikeState: States       = States.OFF   #uses blue button
@@ -62,8 +65,8 @@ class Alarm:
         TINK.clrDOUT(self.TINKERADDR,2)           # Red LED
         TINK.clrDOUT(self.TINKERADDR,4)           # Blue LED
         TINK.clrDOUT(self.TINKERADDR,6)           # Surrogate Alarm horn
-        TINK.relayOFF(self.TINKERADDR,1)          # Alarm Horn
-        TINK.relayOFF(self.TINKERADDR,2)          # Buzzer
+        TINK.relayOFF(self.TINKERADDR, self.BUZZER)   # Alarm Horn
+        TINK.relayOFF(self.TINKERADDR, self.ALARMHORN)# Buzzer
         
         self.BikeState = States.OFF
         self.InteriorState = States.OFF
@@ -151,8 +154,7 @@ class Alarm:
             self.LastButtonTime = NowTime
 
     def _display(self):
-    #note: horn is relay 1 and buzzer is relay 2
-
+    
         IntState    = self.StateConsts[self.InteriorState]
         BkState     = self.StateConsts[self.BikeState]
         if IntState[0] == 0:
@@ -169,17 +171,19 @@ class Alarm:
         AlarmVal = IntState[2] + BkState[2]
 
         if BuzzerVal == 0:
-            TINK.relayOFF(self.TINKERADDR,2)
+            TINK.relayOFF(self.TINKERADDR, self.BUZZER)
             TINK.clrLED(self.TINKERADDR,0)
         elif BuzzerVal == 1:
-            ##TINK.relayON(self.TINKERADDR,2)
+            if self.LOUDENABLE:
+                    TINK.relayON(self.TINKERADDR,self.BUZZER)
             TINK.setLED(self.TINKERADDR,0)
         
         if AlarmVal == 0:
-            TINK.relayOFF(self.TINKERADDR,1)
+            TINK.relayOFF(self.TINKERADDR,self.ALARMHORN)
             TINK.clrDOUT(self.TINKERADDR,6)
         elif AlarmVal == 1:
-            ##TINK.relayON(self.TINKERADDR,1)
+            if self.LOUDENABLE:
+                TINK.relayON(self.TINKERADDR,self.ALARMHORN)
             TINK.setDOUT(self.TINKERADDR,6)
 
         if BuzzerVal > 1 or AlarmVal > 1 or IntState[0] > 1 or BkState[0] > 1:
@@ -190,10 +194,12 @@ class Alarm:
                 if BkState[0] > 2:                # Blue Light
                     TINK.toggleDOUT(self.TINKERADDR,4)
                 if BuzzerVal > 2:
-                    ##TINK.relayTOGGLE(self.TINKERADDR,2)
+                    if self.LOUDENABLE:
+                        TINK.relayTOGGLE(self.TINKERADDR,self.BUZZER)
                     TINK.toggleLED(self.TINKERADDR,0)
                 if AlarmVal > 2:
-                    ##TINK.relayTOGGLE(self.TINKERADDR,1)
+                    if self.LOUDENABLE:
+                        TINK.relayTOGGLE(self.TINKERADDR,self.ALARMHORN)
                     TINK.toggleDOUT(self.TINKERADDR,6)
             elif (self.LoopCount % self.FASTBLINK) == 0:
                 if IntState[0] > 8:            # Red Light
@@ -201,10 +207,12 @@ class Alarm:
                 if BkState[0] > 8:                # Blue Light
                     TINK.toggleDOUT(self.TINKERADDR,4)
                 if BuzzerVal > 8:
-                    ##TINK.relayTOGGLE(self.TINKERADDR,2)
+                    if self.LOUDENABLE:
+                        TINK.relayTOGGLE(self.TINKERADDR,self.BUZZER)
                     TINK.toggleLED(self.TINKERADDR,0)
                 if AlarmVal > 8:
-                    ##TINK.relayTOGGLE(self.TINKERADDR,1)
+                    if self.LOUDENABLE:
+                        TINK.relayTOGGLE(self.TINKERADDR,self.ALARMHORN)
                     TINK.toggleDOUT(self.TINKERADDR,6)
                 
 

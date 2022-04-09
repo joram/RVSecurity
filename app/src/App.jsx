@@ -4,6 +4,7 @@ import {Button} from "semantic-ui-react";
 
 function doActionOnServer(){
     console.log("button push")
+    // the fetch stmt must change  localhost to proper Pi IP address
     fetch('http://localhost:8000/action1', {
       method: 'POST',
       headers: {
