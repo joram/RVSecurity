@@ -1,5 +1,12 @@
 import piplates.TINKERplate as TINK
 import time
+import RPi.GPIO as GPIO
+import time
+import logging
+
+
+
+
 from enum import Enum
 
 class States(Enum):
@@ -42,6 +49,11 @@ class Alarm:
     ALARMHORN       = 2
     LOUDENABLE      = True
     
+    # Pin Definitons not using PI HAT:
+    PIRSensor       = 17                 # Broadcom pin 17 (P1 pin 11)
+
+
+
     # Class variables
     AlarmTime: float        = 0.0
     BikeState: States       = States.OFF   #uses blue button
@@ -70,6 +82,9 @@ class Alarm:
         
         self.BikeState = States.OFF
         self.InteriorState = States.OFF
+        # Pin Setup:
+        GPIO.setmode(GPIO.BCM) # Broadcom pin-numbering scheme
+        GPIO.setup(self.PIRSensor, GPIO.IN) # 
      
     def set_state(self, state_var: AlarmTypes, state_val: States):
         if state_var == AlarmTypes.Interior:
@@ -87,42 +102,45 @@ class Alarm:
         else:
             return self.BikeState
          
+    def _bikewire_error_tst(self) -> bool:
+        VOL_DELTA = .25                                             #Allowed voltage delta in trip wire
+        Chan1_Base = TINK.getADC(self.TINKERADDR,1)                 #This measures the 5V supply used to generate Chan3_Base and Chan4_Base 
+        Chan3_Base = Chan1_Base * 0.6666                            #ratio set by resistive divider
+        Chan4_Base = Chan1_Base * 0.3333
+        Chan3_Raw = TINK.getADC(self.TINKERADDR,3)
+        Chan3_Err = abs(Chan3_Raw - Chan3_Base)
+        Chan4_Raw = TINK.getADC(self.TINKERADDR,4)
+        Chan4_Err = abs(Chan4_Raw - Chan4_Base)
+        error_status = (Chan3_Err > VOL_DELTA) or (Chan4_Err > VOL_DELTA)
+        if error_status or (self.LoopCount % 14400 == 0):
+            Err_msg = "Chan1B= " + str(Chan1_Base) + " Chan3B = "  + str(Chan3_Base) + " Chan4B= " + str(Chan4_Base), \
+                  " Chan3_Raw= " + str(Chan3_Raw) +  " Chan4_Raw= " + str(Chan4_Raw), \
+                  " Chan3_Err= " + str(Chan3_Err) +  " Chan4_Err= " + str(Chan4_Err)
+            logging.debug(Err_msg)
+        return (error_status)                                       # returns true if error detected
+    
     def _check_bike_wire(self):
-        VOL_DELTA = .2              #Allowed voltage delta in trip wire
-        if self.BikeState in [States.ON, States.STARTING]:
-            Chan1_Base = TINK.getADC(self.TINKERADDR,1)    #This measures the 5V supply used to generate Chan3_Base and Chan4_Base 
-            Chan3_Base = Chan1_Base * 0.6666        #ratio set by resistive divider
-            Chan4_Base = Chan1_Base * 0.3333
-            Chan3 = abs(TINK.getADC(self.TINKERADDR,3) - Chan3_Base)
-            Chan4 = abs(TINK.getADC(self.TINKERADDR,4) - Chan4_Base)
-            if (Chan3 > VOL_DELTA) or (Chan4 > VOL_DELTA):
-                # Error detected 
-                if(self.BikeState == States.STARTING):
-                    # Starting errror
-                    #self.BikeState = States.STARTERROR
-                    self.set_state(AlarmTypes.Bike, States.STARTERROR)
-                else:
-                    # Alarm triggere; 
-                    #self.BikeState = States.TRIGGERED   #Note: Bike has no alarm triggered delay.
-                    self.set_state(AlarmTypes.Bike, States.TRIGGERED)
-                    self.AlarmTime = self.LoopTime
-
-
-    @property
-    def _wire_broken(self):
-        return TINK.getDIN(self.TINKERADDR, 5) == 1
-
-
+        if self.BikeState in [States.ON, States.STARTING] and self._bikewire_error_tst() and self._bikewire_error_tst(): 
+            #two tests show error
+            if(self.BikeState == States.STARTING):
+                # Starting errror
+                #self.BikeState = States.STARTERROR
+                self.set_state(AlarmTypes.Bike, States.STARTERROR)
+            else:
+                # Alarm trigger 
+                #self.BikeState = States.TRIGGERED   #Note: Bike has no alarm triggered delay.
+                self.set_state(AlarmTypes.Bike, States.TRIGGERED)
+                self.AlarmTime = self.LoopTime
+    
     def _check_interior(self):
-        if self.InteriorState == States.STARTING and self._wire_broken:
-            #Alarm triggered but starting
-             #self.InteriorState = States.STARTERROR
+        if self.InteriorState == States.STARTING and GPIO.input(self.PIRSensor): 
+             #Alarm triggered but starting
             self.set_state(AlarmTypes.Interior, States.STARTERROR)
-        if self.InteriorState == States.ON and self._wire_broken:
+        elif self.InteriorState == States.ON and GPIO.input(self.PIRSensor): 
             #Alarm triggered
-            #self.InteriorState = States.TRIGDELAY
             self.set_state(AlarmTypes.Interior, States.TRIGDELAY)
             self.AlarmTime = self.LoopTime
+            logging.info("Interior Alarm triggered")
 
     def _check_buttons(self):
         BUTTONDELAY = 1             # Time (sec) before button toggles
@@ -137,9 +155,11 @@ class Alarm:
                 #self.InteriorState = States.STARTING
                 #self.InteriorTime = NowTime
                 self.set_state(AlarmTypes.Interior,States.STARTING)
+                logging.info("Red Starting")
             else:
                 #self.InteriorState = States.OFF
                 self.set_state(AlarmTypes.Interior,States.OFF)
+                logging.info("Red Stopping")
             self.LastButtonTime = NowTime
 
         if BlueButton == 1 and ((NowTime-self.LastButtonTime) > BUTTONDELAY): 
@@ -148,9 +168,11 @@ class Alarm:
                 #self.BikeState = States.STARTING 
                 #self.BikeTime = NowTime
                 self.set_state(AlarmTypes.Bike,States.STARTING)
+                logging.info("Blue Starting")
             else:
                 #self.BikeState = States.OFF
                 self.set_state(AlarmTypes.Bike, States.OFF)
+                logging.info("Blue Stopping")
             self.LastButtonTime = NowTime
 
     def _display(self):
@@ -263,5 +285,7 @@ class Alarm:
             time.sleep(self.LOOPDELAY) #sleep
 
 if __name__ == "__main__":
+    logging.basicConfig(filename='alarm.log', level=logging.DEBUG, format='%(asctime)s %(message)s')
+    logging.info('Alarm App Starting')
     RVIO = Alarm()
     RVIO.run_alarm_infinite()
