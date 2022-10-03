@@ -13,7 +13,9 @@ start_app:
 # Only need to start_app if changing the client code
 
 build:
-	cd app; npm rumake n-script build
+#	cd app; npx browserslist@latest --update-db
+	cd app; export NODE_OPTIONS=--openssl-legacy-provider; npm run-script build
+	rm -r ./api/build
 	cd app; mv ./build ../api/
 # only requried for client code and want to merge with server
 

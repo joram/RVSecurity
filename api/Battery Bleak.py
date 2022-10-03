@@ -17,6 +17,7 @@ import platform
 from bleak import BleakClient
 import atexit
 import time
+import os
 
 import logging
 
@@ -30,6 +31,8 @@ CHARACTERISTIC_UUID = '0000ffe1-0000-1000-8000-00805f9b34fb'          #GATT Char
 
 #variables
 LastMessage = ""
+LastVolt = 0
+LastAmps = 0
 
 
 
@@ -37,23 +40,37 @@ def notification_handler_battery(sender, data):
     """Simple notification handler which prints the data received.
     Note data from device comes back as binary array of data representing the data
     in a BCD format seperated by commas.  The end of record termination is \r.
-    Each return provides 20 bytes in the following format
+    Data is comma seperated BCD ASCII values; Not necessarily in a fixed position but close
+    CSV datafields are:
+    1 - Battery voltage (assume 2 decimal positions)
+    2 - Battery cell 1 status
+    3 - Battery cell 2 status
+    4 - Battery cell 3 status
+    5 - Battery cell 4 status
+    6 - Battery Temp in F
+    7 - Battery Mgmnt Sys Temp in F
+    8 - Current in amps +/-
+    9 - Percent Battery full
+    10 - Battery Status
+    (Total number of bytes seems constant at 40 across 3 messsages)
+
+    Each return provides 20 bytes in the following format (that changes a little depending on result values)
     4 bytes - providing the battery voltage 13.50 (note the decimal point is assumed)
     1 byte  - comma
-    3 bytes - current in amps +/- 10.5
+    3 bytes - Battery cell 1 status  (don't know number meaning)
     1 byte  - comma
-    3 bytes - current in amps +/- 10.5
+    3 bytes - Battery cell 2 status
     1 byte  - comma
-    3 bytes - Power in kW +/- 10.5
+    3 bytes - Battery cell 3 status
     1 byte  - comma
-    3 bytes - Power in kW +/- 10.5
+    3 bytes - Battery cell 4 status
     ************  new record starts here
     1 byte  - comma
     2 bytes - Battery Temp in F (Not sure of neg values)
     1 byte  - comma
     2 bytes - BMS in F (Not sure of neg values)
     1 byte  - comma
-    1 byte  - not sure of meaning values 0 to -2
+    1 byte  - current in amps +/-
     3 bytes - Percent battery full (0 - 100%)
     1 byte  - comma
     6 bytes - Status Code (all 0's is good)
@@ -62,37 +79,70 @@ def notification_handler_battery(sender, data):
     1 byte  - record termination char 0x0a  LF
      """
     
-    global LastMessage
+    global LastMessage, LastAmps, LastVolt
     global fp
+    
+    # raw print of all data
+    #print(" {0}: {1}".format(sender, data))
 
-    if data[0] == 0x0a:          # end of complete record
-        TimeString = str(time.time())
-        print(TimeString + ","+ LastMessage)
-        fp.write(TimeString + ","+ LastMessage)
-        """
-        print("Volt = " + LastMessage[0:4])
-        print("Amp1 = " + LastMessage[5:8])
-        print("Amp2 = " + LastMessage[9:12])
-        print("Pwr1 = " + LastMessage[13:16])
-        print("Pwr2 = " + LastMessage[17:20])
-        print("Temp = " + LastMessage[21:23])
-        print("BMS  = " + LastMessage[24:26])
-        print("???  = " + LastMessage[27])
-        print("Full = " + LastMessage[29:32])
-        print("Stat = " + LastMessage[33:39])
-        """
+        
+    if data[0] == 0x0a:                   # now sync'd to end of a record at start
+        if len(LastMessage) == 40:          # end of complete record with 40 bytes
+            """TimeString = str(time.time())
+            while not TimeString:                   #prevents random null return
+                TimeString = str(time.time())
+            print(TimeString + ","+ LastMessage)
+            fp.write(TimeString + ","+ LastMessage)
+                """
+
+            FieldData = LastMessage.split(",")
+
+            CurTime = int(time.time())
+            Volt    = int(FieldData[0])
+            Temp    = int(FieldData[5])
+            Amps    = int(FieldData[7])
+            Full    = int(FieldData[8])
+            Stat    = FieldData[9]
+
+            if LastVolt == Volt and LastAmps == Amps:
+                # No change from last measurement
+                print("{},{},{},{},{},{}".format(CurTime, Volt, Temp, Amps,Full,Stat))
+            else:
+                print("{},{},{},{},{},{}<".format(CurTime, Volt, Temp, Amps,Full,Stat))
+                fp.write("{},{},{},{},{},{}\n".format(CurTime, Volt, Temp, Amps,Full,Stat))
+
+
+            LastVolt = Volt
+            LastAmps = Amps
+
+            """
+            Volt = " + LastMessage[0:4])
+            Cell1= " + LastMessage[5:8])
+            Cell2= " + LastMessage[9:12])
+            Cell3= " + LastMessage[13:16])
+            Cell4= " + LastMessage[17:20])
+            Temp = " + LastMessage[21:23])
+            BMS  = " + LastMessage[24:26])
+            Amps = " + LastMessage[27])
+            Full = " + LastMessage[29:32])
+            Stat = " + LastMessage[33:39])
+            """
+
+        #Reset Vars
         LastMessage = ""
+
     else:
         LastMessage += data.decode("utf-8")
 
-    # print("{0}: {1}".format(sender, data))
-    """
+        """
     hexdata = data.hex()
     print(hexdata)
     strdata = data[0:4].decode('utf-8')    
     print(strdata)
     """
     
+
+ 
     
     
 
@@ -111,6 +161,12 @@ async def main1(address, char_uuid):
 
 async def OneClient(address1, char_uuid):  # need unique address and service address for each  todo
     global fp
+
+    #make sure BLE stack isn't hung on this MAC address
+    stream = os.popen('bluetoothctl disconnect ' + address1)
+    output = stream.read()
+    print(output)
+    time.sleep(2)
 
     client1 = BleakClient(address1)
     await client1.connect()
