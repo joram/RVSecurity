@@ -4,10 +4,10 @@ setup:
 	sudo npm install -g npm@latest
 	cd app; npm install
 
-start_api:
+start_server:
 	cd api; ./server.py
 # do this when working on the server.py co
-start_app:
+start_client:
 	cd app; npm start
 
 # Only need to start_app if changing the client code
