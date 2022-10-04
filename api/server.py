@@ -38,9 +38,9 @@ async def action1(request: Action1Request) -> Action1Response:
     return Action1Response(msg=request.msg.replace("!", "?"))
 
 
-@app.get("/tirepressure")
-async def tirepressure(tire_number: int) -> dict:
-    return {"hello": "world"}
+@app.get("/status")
+async def status() -> dict:
+    return {"hello": "world and more"}
 
 
 app.mount("/", StaticFiles(directory="build"), name="ui")
