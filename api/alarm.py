@@ -1,5 +1,12 @@
+from xmlrpc.client import boolean
 import piplates.TINKERplate as TINK
 import time
+import RPi.GPIO as GPIO
+import time
+
+
+
+
 from enum import Enum
 
 class States(Enum):
@@ -42,6 +49,11 @@ class Alarm:
     ALARMHORN       = 2
     LOUDENABLE      = True
     
+    # Pin Definitons not using PI HAT:
+    PIRSensor       = 17                 # Broadcom pin 17 (P1 pin 11)
+
+
+
     # Class variables
     AlarmTime: float        = 0.0
     BikeState: States       = States.OFF   #uses blue button
@@ -70,6 +82,9 @@ class Alarm:
         
         self.BikeState = States.OFF
         self.InteriorState = States.OFF
+        # Pin Setup:
+        GPIO.setmode(GPIO.BCM) # Broadcom pin-numbering scheme
+        GPIO.setup(self.PIRSensor, GPIO.IN) # 
      
     def set_state(self, state_var: AlarmTypes, state_val: States):
         if state_var == AlarmTypes.Interior:
@@ -87,7 +102,30 @@ class Alarm:
         else:
             return self.BikeState
          
+    def _bikewire_error_tst(self) -> boolean:
+        VOL_DELTA = .25                                             #Allowed voltage delta in trip wire
+        Chan1_Base = TINK.getADC(self.TINKERADDR,1)                 #This measures the 5V supply used to generate Chan3_Base and Chan4_Base 
+        Chan3_Base = Chan1_Base * 0.6666                            #ratio set by resistive divider
+        Chan4_Base = Chan1_Base * 0.3333
+        Chan3 = abs(TINK.getADC(self.TINKERADDR,3) - Chan3_Base)
+        Chan4 = abs(TINK.getADC(self.TINKERADDR,4) - Chan4_Base)
+        return ((Chan3 > VOL_DELTA) or (Chan4 > VOL_DELTA))         # returns true if error detected
+
+    
     def _check_bike_wire(self):
+        if self.BikeState in [States.ON, States.STARTING] and _bikewire_error_tst and _bikewire_error_tst: 
+            #two tests show error
+            if(self.BikeState == States.STARTING):
+                # Starting errror
+                #self.BikeState = States.STARTERROR
+                self.set_state(AlarmTypes.Bike, States.STARTERROR)
+            else:
+                # Alarm trigger 
+                #self.BikeState = States.TRIGGERED   #Note: Bike has no alarm triggered delay.
+                self.set_state(AlarmTypes.Bike, States.TRIGGERED)
+                self.AlarmTime = self.LoopTime
+    
+    def _check_bike_wire_deprecated(self):
         VOL_DELTA = .2              #Allowed voltage delta in trip wire
         if self.BikeState in [States.ON, States.STARTING]:
             Chan1_Base = TINK.getADC(self.TINKERADDR,1)    #This measures the 5V supply used to generate Chan3_Base and Chan4_Base 
@@ -108,19 +146,12 @@ class Alarm:
                     self.AlarmTime = self.LoopTime
 
 
-    @property
-    def _wire_broken(self):
-        return TINK.getDIN(self.TINKERADDR, 5) == 1
-
-
     def _check_interior(self):
-        if self.InteriorState == States.STARTING and self._wire_broken:
-            #Alarm triggered but starting
-             #self.InteriorState = States.STARTERROR
+        if self.InteriorState == States.STARTING and GPIO.input(self.PIRSensor): 
+             #Alarm triggered but starting
             self.set_state(AlarmTypes.Interior, States.STARTERROR)
-        if self.InteriorState == States.ON and self._wire_broken:
+        if self.InteriorState == States.ON and GPIO.input(self.PIRSensor): 
             #Alarm triggered
-            #self.InteriorState = States.TRIGDELAY
             self.set_state(AlarmTypes.Interior, States.TRIGDELAY)
             self.AlarmTime = self.LoopTime
 
