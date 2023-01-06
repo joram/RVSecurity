@@ -5,7 +5,7 @@
 - `git clone git@github.com:joram/RVSecurity.git`
 
 
-now you have a folder of code called `RVSecurity`
+Now you have a folder of code called `RVSecurity`
 
 ## Want to Commit to Cloud Changes
 - `git status` to list the changed files (in red)
@@ -17,24 +17,29 @@ now you have a folder of code called `RVSecurity`
 ## Want to pull down changes
 - `git pull origin main'  Brings down all Cloud main cahnges
 
-## React and API Server commands
-- app/App.jsx file contains most of the React code
+## React Client and Server commands
+- app/App.jsx file contains most of the React client code
 - api/server.py contains the server code
-- to rebuild compiled versoin of the app: 'make build'
+- to rebuild compiled version of the app: 'make build'
   - `npm build`  in the app folder
   - copies the build folder from app to api
-- to start the server (assuming make works) `make start_api`
-- to start the app (assuming make works) `make start_app`
+- to start the server (assuming make works) `make start_server`
+- to start the app (assuming make works) `make start_client`
 - after develeopment loop when ready to deploy: 'make build' (don't foget to commit to cloud)
 - Webpage location:  http://localhost:3000
 - api documentation page: http://localhost:8000/docs
+- Fast debug/test loop steps:
+  - In seperate cmd window: make start_server
+  - In IDE cmd window: make start_client  (this will slowly bring up a browser window)
+  - Then each time you do an IDE save on the client code, it will automatically rebuild and be usable on the browser with a refresh
 
 
 ## Terminology
-- API - code that runs on the webpage server
-- Applicaiton - web code that runs on the persons computer hitting the web page 
-
-
-
+- Server aka API - code that runs on the webpage server
+- Application - web code that runs on the persons computer hitting the web page 
+- REACT is the web framework; see https://reactjs.org/ (start here)
+- React Sematic UI: https://react.semantic-ui.com/
+- Client code: sometimes also called API code; runs on the web browser of the user
+- Server code: sometimes also called Application code; runs on the machine that serves up the web pages
 
 
