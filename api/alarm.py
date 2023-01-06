@@ -1,7 +1,19 @@
-import piplates.TINKERplate as TINK
+try:
+    import piplates.TINKERplate as TINK
+except:
+    print('No TINKERplate found')
+    import mock
+    TINK = mock.Mock()
+
 import time
-import RPi.GPIO as GPIO
-import time
+
+try:
+    import RPi.GPIO as GPIO
+except:
+    print('No GPIO found')
+    import mock
+    GPIO = mock.Mock()
+
 import logging
 
 
