@@ -5,9 +5,10 @@ from setuptools import find_packages, setup
 packages = [
     "uvicorn[standard]==0.15.0",
     "gunicorn==20.1.0",
-    "fastapi",
+    "fastapi==0.89.1",
     "requests==2.27.1",
-    "aiofiles",
+    #"aiofiles",
+    #"aiohttp==3.8.3",
 ]
 
 test_packages = [

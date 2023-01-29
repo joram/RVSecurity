@@ -1,7 +1,7 @@
 
 setup:
 	cd api; pip install .[dev]
-	sudo npm install -g npm@latest
+#	sudo npm install -g npm@latest
 	cd app; npm install
 
 start_api:
@@ -13,8 +13,8 @@ start_app:
 # Only need to start_app if changing the client code
 
 build:
-	cd app; npm rumake n-script build
-	cd app; mv ./build ../api/
+	cd app; npm run-script build
+	cd app; rm -Rf ../api/build; mv ./build ../api/
 # only requried for client code and want to merge with server
 
 

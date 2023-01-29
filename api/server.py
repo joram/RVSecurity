@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import uvicorn
-import alarm
+#import alarm
 
 from fastapi import FastAPI
 from pydantic import BaseModel
