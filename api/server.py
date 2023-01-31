@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
+import threading
+import time
 import uvicorn
 #import alarm
+import mqttwebclient
 
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -27,37 +30,40 @@ async def index():
 
 
 class DataResponse(BaseModel):
-    var1: float
-    var2: float
-    var3: float
-    var4: float
-    var5: float
-    var6: float
-    var7: float
-    var8: float
-    var9: float
-    var10: float
-    var11: float
-    var12: float
+    var1: str
+    var2: str
+    var3: str
+    var4: str
+    var5: str
+    var6: str
+    var7: str
+    var8: str
+    var9: str
+    var10: str
+    var11: str
+    var12: str
 
 
 @app.get("/data")
 async def data() -> DataResponse:
 
+    #print('mqttwebclient.', mqttwebclient.AliasData["_var07"])
+    print(type(mqttwebclient.AliasData["_var02"]),type(mqttwebclient.AliasData["_var03"]), type(mqttwebclient.AliasData["_var15"]), type(mqttwebclient.AliasData["_var16"]))
+
     # TODO: get real data
     return DataResponse(
-        var1=round(random.random(), 2),
-        var2=round(random.random(), 2),
-        var3=round(random.random(), 2),
-        var4=round(random.random(), 2),
-        var5=round(random.random(), 2),
-        var6=round(random.random(), 2),
-        var7=round(random.random(), 2),
-        var8=round(random.random(), 2),
-        var9=round(random.random(), 2),
-        var10=round(random.random(), 2),
-        var11=round(random.random(), 2),
-        var12=round(random.random(), 2),
+        var1=str('??'),               # Shore Power Watts
+        var2=str('??'),  # Solar Output Watts
+        var3=str('??'),  # Generator Watts
+        var4='%.2f' % (mqttwebclient.AliasData["_var02"] * mqttwebclient.AliasData["_var03"]),  # Invertor AC Watts =  (_var02 * _var03;  mode = _var01)
+        var5='%.2f' % (mqttwebclient.AliasData["_var15"] * mqttwebclient.AliasData["_var16"]),  # Invertor DC Watts  = (_var15 * _var16)
+        var6=str('??'),  # Battery % remaining
+        var7=str('??'),  # Battery Watts I/O
+        var8=mqttwebclient.AliasData["_var07"],  # Battery charge status = _var07
+        var9=str('??'),  # AC Load Watts
+        var10=str('??'), # DC Load Watts
+        var11='%.2f' % (mqttwebclient.AliasData["_var03"]), # AC Volts = _var03
+        var12='%.2f' % (mqttwebclient.AliasData["_var16"]), # DC Volts = _var16
     )
 
 @app.get("/status")
@@ -69,8 +75,15 @@ app.mount("/", StaticFiles(directory="build"), name="ui")
 
 
 if __name__ == "__main__":
-    #kick off alarm thread here
+    #kick off threads here    
+    t1 = threading.Thread(target=mqttwebclient.webmqttclient().run_webMQTT_infinite)
+    #t1 = threading.Thread(target=mqttwebclient.webmqttclient().printhello)
+    t1.start()
 
     # "0.0.0.0" => accept requests from any IP addr
     #uvicorn.run("app", host="0.0.0.0", port=80, reload=True)
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+    try:
+        uvicorn.run(app, host="0.0.0.0", port=8000)
+    except KeyboardInterrupt:
+        print('keyboard inetrrupt ')

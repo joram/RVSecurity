@@ -18,12 +18,10 @@ Now you have a folder of code called `RVSecurity`
 - `git pull origin main'  Brings down all Cloud main cahnges
 
 ## React Client and Server commands
-- app/App.jsx file contains most of the React client code
-- api/server.py contains the server code
+- app/App.jsx file contains most of the React client code (Loads svg file and maps variables)
+- api/server.py contains the server code (must write/update all the variables)
 - to rebuild compiled version of the app: 'make build'
-  - `npm build`  in the app folder
-  - copies the build folder from app to api
-- to start the server (assuming make works) `make start_server`
+- to start the server (assuming make works) `make start_server` Then open browswer to localhost:8000
 - to start the app (assuming make works) `make start_client`
 - after develeopment loop when ready to deploy: 'make build' (don't foget to commit to cloud)
 - Webpage location:  http://localhost:3000

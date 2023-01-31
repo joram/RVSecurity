@@ -7,6 +7,7 @@ packages = [
     "gunicorn==20.1.0",
     "fastapi==0.89.1",
     "requests==2.27.1",
+    "paho-mqtt==3.1.1"
     #"aiofiles",
     #"aiohttp==3.8.3",
 ]

@@ -1,18 +1,23 @@
 
 setup:
+# do this once to setup the environment
 	cd api; pip install .[dev]
-#	sudo npm install -g npm@latest
+	$NVM_DIR/nvm use default
 	cd app; npm install
 
-start_server:
+server_start:
+# do this when working on the server.py code
+# start_server in a separate cmd window; always first
 	cd api; ./server.py
-# do this when working on the server.py co
-start_client:
+
+client_start:
+# Only need to start_app if changing the client code
+# start_Client in a separate cmd window (note: server must be started first)
 	cd app; npm start
 
-# Only need to start_app if changing the client code
 
 build:
+#this is only needed whey you're ready to deploy
 	cd app; npm run-script build
 	cd app; rm -Rf ../api/build; mv ./build ../api/
 
