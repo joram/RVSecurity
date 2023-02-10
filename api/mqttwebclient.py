@@ -58,7 +58,8 @@ class webmqttclient():
             if msg_counter % 20 == 0:
                 #os.system('clear')
                 print('*******************************************************')
-                pprint(AliasData)
+                #pprint(AliasData)
+                pprint(TopicData)
                 os.sys.stdout.flush()
                 msg_counter = 0
         

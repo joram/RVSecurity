@@ -27,13 +27,13 @@ function App() {
       const interval = setInterval(() => {
         getData();
 
-      }, 300);
+      }, 1000);
       return () => clearInterval(interval);
     }, [])
 
         console.log('Logs every 0.5s', data);
     return (
-        <div className="App">
+        <div dsclassName="App">
             <SVGDiagram
                 filename={Sophie}
                 var1={data.var1}
@@ -48,6 +48,15 @@ function App() {
                 var10={data.var10}
                 var11={data.var11}
                 var12={data.var12}
+                var13={data.var13}
+                var14={data.var14}
+                var15={data.var15}
+                var16={data.var16}
+                var17={data.var17}
+                var18={data.var18}
+                var19={data.var19}
+                var20={data.var20}
+
             />
         </div>
     )

@@ -3,6 +3,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+#React 
+api/build/
+app/package-lock.json
+
+
+
 # C extensions
 *.so
 
