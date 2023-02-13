@@ -110,12 +110,13 @@ class webmqttclient():
                 msg_counter = 0
     
     def pub(self,topic, payload, qos=0, retain=False):
-        global client
+        global client, debug
         if debug > 3:
             print('Publishing: ', topic, payload)
-        if payload(0:3) == '_var':
+        if payload[0:3] == '_var':
             payload = AliasData[payload]
         client.publish(topic, payload, qos, retain)
+        #additional changes needed in here TODO. Issue is format stored on MQTT server is different than format needed for web
         
     def run_webMQTT_infinite(self):
         global client

@@ -175,15 +175,15 @@ app.mount("/", StaticFiles(directory="build"), name="ui")
 
 
 if __name__ == "__main__":
-    #kick off threads here    
-    t1 = threading.Thread(target=mqttwebclient.webmqttclient().run_webMQTT_infinite)
+    #kick off threads here  
+    # webmqttclient("localhost", 1883, "dgn_variables.json",'_var', 'RVC', True, debug)  
+    t1 = threading.Thread(target=mqttwebclient.webmqttclient("localhost", 1883, "dgn_variables.json",'_var', 'RVC', True, 0).run_webMQTT_infinite)
     #t1 = threading.Thread(target=mqttwebclient.webmqttclient().printhello)
     t1.start()
 
     # "0.0.0.0" => accept requests from any IP addr
     #uvicorn.run("app", host="0.0.0.0", port=80, reload=True)
 
-    try:
-        uvicorn.run(app, host="0.0.0.0", port=8000)
-    except KeyboardInterrupt:
-        print('keyboard inetrrupt ')
+    
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    
