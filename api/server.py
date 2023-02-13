@@ -53,6 +53,7 @@ class DataResponse(BaseModel):
     var18: str
     var19: str
     var20: str
+    battery_percent: int
 
 #routine to generation Flow motion text
 def FlowMotion():
@@ -162,6 +163,7 @@ async def data() -> DataResponse:
         var18= BatteryFlow,                        #Battery power Flow
         var19= '?? Watts Chassie Gen',
         var20=str('%.1f' % ((float(mqttwebclient.AliasData["_var01Timestamp"])-timebase)/60)) + " Time (min)",
+        battery_percent= 55,
     )
 
 @app.get("/status")

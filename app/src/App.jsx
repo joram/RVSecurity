@@ -2,12 +2,13 @@ import React, {useEffect, useState} from "react";
 import './App.css';
 import Sophie from "./Sophie2.svg";
 import SVGDiagram from "./SVGDiagram";
+import BatteryGauge from "react-battery-gauge";
 
 
 function App() {
     let [data, setData] = useState({});
     const getData=()=>{
-        fetch('http://localhost:8000/data'
+        fetch('http://192.168.2.177:8000/data'
         ,{
           headers : {
             'Content-Type': 'application/json',
@@ -27,13 +28,14 @@ function App() {
       const interval = setInterval(() => {
         getData();
 
-      }, 1000);
+      }, 1000);  // 1000 ms = 1 second
       return () => clearInterval(interval);
     }, [])
 
-        console.log('Logs every 0.5s', data);
     return (
+      
         <div dsclassName="App">
+  
             <SVGDiagram
                 filename={Sophie}
                 var1={data.var1}
@@ -57,7 +59,17 @@ function App() {
                 var19={data.var19}
                 var20={data.var20}
 
-            />
+            >
+            <div className="battery">
+              <BatteryGauge 
+                value={data.batery_percent}
+                size={150}
+                padding={5}
+                aspectRatio={0.42}
+              />
+            </div> 
+            
+            </SVGDiagram>
         </div>
     )
 }

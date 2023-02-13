@@ -4,7 +4,9 @@ import SVG from 'react-inlinesvg';
 
 
 function SVGDiagram(props) {
-    let {filename, var1, var2, var3, var4, var5, var6, var7, var8, var9, var10, var11, var12, var13, var14, var15, var16, var17, var18, var19, var20 } = props
+    let {filename, var1, var2, var3, var4, var5, var6, var7, var8, var9, var10, 
+        var11, var12, var13, var14, var15, var16, var17, var18, var19, var20,
+        children } = props
     let [svgText, setSvgText] = React.useState( null);
 
     let replacements = [
@@ -44,10 +46,10 @@ function SVGDiagram(props) {
         })
     }
 
-    console.log(svg)
     return (
-        <div className="App">
+        <div className="base_svg">
             <SVG src={svg}/>
+            {children}
         </div>
     )
 }
