@@ -3,9 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-#React 
+#React Likely want to remove this later
 api/build/
 app/package-lock.json
+app/package.json
 
 
 
