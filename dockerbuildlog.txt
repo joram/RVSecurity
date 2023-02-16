@@ -1,0 +1,569 @@
+Sending build context to Docker daemon  274.3MB
+Step 1/11 : FROM python:3.10-slim-buster
+ ---> c7543bea63e8
+Step 2/11 : RUN python3 -m pip install --upgrade pip
+ ---> Using cache
+ ---> db6bb6a53395
+Step 3/11 : WORKDIR /app/rvsecurity
+ ---> Running in 222fccc579fa
+Removing intermediate container 222fccc579fa
+ ---> c18341f93066
+Step 4/11 : COPY server/build server/.
+ ---> f11ea8049a6a
+Step 5/11 : COPY server/server.py server/.
+ ---> 5db6c6206c49
+Step 6/11 : COPY server/mqttwebclient.py server/.
+ ---> b31c1ca0eefe
+Step 7/11 : COPY server/setup.py server/.
+ ---> 9c2af5c436d5
+Step 8/11 : COPY server/dgn_variables.json server/.
+ ---> d226379456d8
+Step 9/11 : WORKDIR /app/rvsecurity/server
+ ---> Running in ebb3bfb73cd3
+Removing intermediate container ebb3bfb73cd3
+ ---> e313b17de602
+Step 10/11 : RUN python3 -m pip install --use-pep517 .[dev]
+ ---> Running in 8cfac8a5007e
+Processing /app/rvsecurity/server
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting requests==2.27.1
+  Downloading requests-2.27.1-py2.py3-none-any.whl (63 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 63.1/63.1 kB 2.6 MB/s eta 0:00:00
+Collecting fastapi==0.89.1
+  Downloading fastapi-0.89.1-py3-none-any.whl (55 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 55.8/55.8 kB 3.1 MB/s eta 0:00:00
+Collecting gunicorn==20.1.0
+  Downloading gunicorn-20.1.0-py3-none-any.whl (79 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 79.5/79.5 kB 2.9 MB/s eta 0:00:00
+Collecting uvicorn[standard]==0.15.0
+  Downloading uvicorn-0.15.0-py3-none-any.whl (54 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 54.4/54.4 kB 3.2 MB/s eta 0:00:00
+Collecting paho-mqtt==1.6.1
+  Downloading paho-mqtt-1.6.1.tar.gz (99 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 99.4/99.4 kB 4.6 MB/s eta 0:00:00
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting responses
+  Downloading responses-0.22.0-py3-none-any.whl (51 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 51.1/51.1 kB 1.5 MB/s eta 0:00:00
+Collecting black==20.8b1
+  Downloading black-20.8b1.tar.gz (1.1 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.1/1.1 MB 7.9 MB/s eta 0:00:00
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting mock==4.0.3
+  Downloading mock-4.0.3-py3-none-any.whl (28 kB)
+Collecting flake8-builtins==1.5.3
+  Downloading flake8_builtins-1.5.3-py2.py3-none-any.whl (12 kB)
+Collecting flake8-import-order==0.18.1
+  Downloading flake8_import_order-0.18.1-py2.py3-none-any.whl (15 kB)
+Collecting flake8-bugbear==20.1.4
+  Downloading flake8_bugbear-20.1.4-py36.py37.py38-none-any.whl (15 kB)
+Collecting pytest==6.2.1
+  Downloading pytest-6.2.1-py3-none-any.whl (279 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 279.9/279.9 kB 7.8 MB/s eta 0:00:00
+Collecting flake8-tidy-imports==4.2.1
+  Downloading flake8_tidy_imports-4.2.1-py3-none-any.whl (8.6 kB)
+Collecting pre-commit==2.9.3
+  Downloading pre_commit-2.9.3-py2.py3-none-any.whl (184 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 185.0/185.0 kB 5.1 MB/s eta 0:00:00
+Collecting flake8-comprehensions==3.2.3
+  Downloading flake8_comprehensions-3.2.3-py3-none-any.whl (6.8 kB)
+Collecting starlette
+  Downloading starlette-0.25.0-py3-none-any.whl (66 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 66.4/66.4 kB 3.2 MB/s eta 0:00:00
+Collecting flake8==3.8.4
+  Downloading flake8-3.8.4-py2.py3-none-any.whl (72 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 72.9/72.9 kB 3.6 MB/s eta 0:00:00
+Collecting regex>=2020.1.8
+  Downloading regex-2022.10.31.tar.gz (391 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 391.6/391.6 kB 3.7 MB/s eta 0:00:00
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting appdirs
+  Downloading appdirs-1.4.4-py2.py3-none-any.whl (9.6 kB)
+Collecting toml>=0.10.1
+  Downloading toml-0.10.2-py2.py3-none-any.whl (16 kB)
+Collecting typing-extensions>=3.7.4
+  Using cached typing_extensions-4.4.0-py3-none-any.whl (26 kB)
+Collecting typed-ast>=1.4.0
+  Downloading typed_ast-1.5.4.tar.gz (252 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 252.5/252.5 kB 6.6 MB/s eta 0:00:00
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting mypy-extensions>=0.4.3
+  Downloading mypy_extensions-1.0.0-py3-none-any.whl (4.7 kB)
+Collecting pathspec<1,>=0.6
+  Downloading pathspec-0.11.0-py3-none-any.whl (29 kB)
+Collecting click>=7.1.2
+  Downloading click-8.1.3-py3-none-any.whl (96 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 96.6/96.6 kB 4.6 MB/s eta 0:00:00
+Collecting pydantic!=1.7,!=1.7.1,!=1.7.2,!=1.7.3,!=1.8,!=1.8.1,<2.0.0,>=1.6.2
+  Downloading pydantic-1.10.4-py3-none-any.whl (155 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 155.3/155.3 kB 5.0 MB/s eta 0:00:00
+Collecting starlette
+  Downloading starlette-0.22.0-py3-none-any.whl (64 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 64.3/64.3 kB 3.9 MB/s eta 0:00:00
+Collecting pyflakes<2.3.0,>=2.2.0
+  Downloading pyflakes-2.2.0-py2.py3-none-any.whl (66 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 67.0/67.0 kB 3.9 MB/s eta 0:00:00
+Collecting pycodestyle<2.7.0,>=2.6.0a1
+  Downloading pycodestyle-2.6.0-py2.py3-none-any.whl (41 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 41.4/41.4 kB 2.6 MB/s eta 0:00:00
+Collecting mccabe<0.7.0,>=0.6.0
+  Downloading mccabe-0.6.1-py2.py3-none-any.whl (8.6 kB)
+Collecting attrs>=19.2.0
+  Downloading attrs-22.2.0-py3-none-any.whl (60 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 60.0/60.0 kB 2.9 MB/s eta 0:00:00
+Requirement already satisfied: setuptools in /usr/local/lib/python3.10/site-packages (from flake8-import-order==0.18.1->RVSecurity==1.0) (65.5.1)
+Collecting nodeenv>=0.11.1
+  Downloading nodeenv-1.7.0-py2.py3-none-any.whl (21 kB)
+Collecting cfgv>=2.0.0
+  Downloading cfgv-3.3.1-py2.py3-none-any.whl (7.3 kB)
+Collecting virtualenv>=20.0.8
+  Downloading virtualenv-20.19.0-py3-none-any.whl (8.7 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8.7/8.7 MB 2.2 MB/s eta 0:00:00
+Collecting pyyaml>=5.1
+  Downloading PyYAML-6.0.tar.gz (124 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 125.0/125.0 kB 3.8 MB/s eta 0:00:00
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting identify>=1.0.0
+  Downloading identify-2.5.18-py2.py3-none-any.whl (98 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 98.8/98.8 kB 3.6 MB/s eta 0:00:00
+Collecting py>=1.8.2
+  Downloading py-1.11.0-py2.py3-none-any.whl (98 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 98.7/98.7 kB 5.2 MB/s eta 0:00:00
+Collecting iniconfig
+  Downloading iniconfig-2.0.0-py3-none-any.whl (5.9 kB)
+Collecting pluggy<1.0.0a1,>=0.12
+  Downloading pluggy-0.13.1-py2.py3-none-any.whl (18 kB)
+Collecting packaging
+  Using cached packaging-23.0-py3-none-any.whl (42 kB)
+Collecting certifi>=2017.4.17
+  Downloading certifi-2022.12.7-py3-none-any.whl (155 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 155.3/155.3 kB 5.9 MB/s eta 0:00:00
+Collecting charset-normalizer~=2.0.0
+  Downloading charset_normalizer-2.0.12-py3-none-any.whl (39 kB)
+Collecting idna<4,>=2.5
+  Downloading idna-3.4-py3-none-any.whl (61 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 61.5/61.5 kB 3.9 MB/s eta 0:00:00
+Collecting urllib3<1.27,>=1.21.1
+  Downloading urllib3-1.26.14-py2.py3-none-any.whl (140 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 140.6/140.6 kB 5.0 MB/s eta 0:00:00
+Collecting anyio<5,>=3.4.0
+  Downloading anyio-3.6.2-py3-none-any.whl (80 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 80.6/80.6 kB 4.7 MB/s eta 0:00:00
+Collecting asgiref>=3.4.0
+  Downloading asgiref-3.6.0-py3-none-any.whl (23 kB)
+Collecting h11>=0.8
+  Downloading h11-0.14.0-py3-none-any.whl (58 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 58.3/58.3 kB 3.4 MB/s eta 0:00:00
+Collecting websockets>=9.1
+  Downloading websockets-10.4.tar.gz (84 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 84.9/84.9 kB 4.6 MB/s eta 0:00:00
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting uvloop!=0.15.0,!=0.15.1,>=0.14.0
+  Downloading uvloop-0.17.0.tar.gz (2.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.3/2.3 MB 3.3 MB/s eta 0:00:00
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting watchgod>=0.6
+  Downloading watchgod-0.8.2-py3-none-any.whl (12 kB)
+Collecting python-dotenv>=0.13
+  Downloading python_dotenv-0.21.1-py3-none-any.whl (19 kB)
+Collecting httptools==0.2.*
+  Downloading httptools-0.2.0.tar.gz (169 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 169.3/169.3 kB 3.1 MB/s eta 0:00:00
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting types-toml
+  Downloading types_toml-0.10.8.3-py3-none-any.whl (4.5 kB)
+Collecting sniffio>=1.1
+  Downloading sniffio-1.3.0-py3-none-any.whl (10 kB)
+Collecting distlib<1,>=0.3.6
+  Downloading distlib-0.3.6-py2.py3-none-any.whl (468 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 468.5/468.5 kB 8.1 MB/s eta 0:00:00
+Collecting filelock<4,>=3.4.1
+  Downloading filelock-3.9.0-py3-none-any.whl (9.7 kB)
+Collecting platformdirs<4,>=2.4
+  Downloading platformdirs-3.0.0-py3-none-any.whl (14 kB)
+Building wheels for collected packages: black, paho-mqtt, httptools, RVSecurity, pyyaml, regex, typed-ast, uvloop, websockets
+  Building wheel for black (pyproject.toml): started
+  Building wheel for black (pyproject.toml): finished with status 'done'
+  Created wheel for black: filename=black-20.8b1-py3-none-any.whl size=124176 sha256=e8a4a895e2d8d52e6a03e48e0b74816558de0966cccde2471c264ce07309f948
+  Stored in directory: /root/.cache/pip/wheels/a6/27/2c/11ae14a58d1591140f9ad31b7954a8ecc5b20fd3164b6fe8ba
+  Building wheel for paho-mqtt (pyproject.toml): started
+  Building wheel for paho-mqtt (pyproject.toml): finished with status 'done'
+  Created wheel for paho-mqtt: filename=paho_mqtt-1.6.1-py3-none-any.whl size=62118 sha256=888efe31ffe23c1515b26df732cb1bebdb7544fe643ad1ec176dc0a63f96d5d8
+  Stored in directory: /root/.cache/pip/wheels/8b/bb/0c/79444d1dee20324d442856979b5b519b48828b0bd3d05df84a
+  Building wheel for httptools (pyproject.toml): started
+  Building wheel for httptools (pyproject.toml): finished with status 'error'
+[91m  error: subprocess-exited-with-error
+  
+  × Building wheel for httptools (pyproject.toml) did not run successfully.
+  │ exit code: 1
+  ╰─> [32 lines of output]
+      running bdist_wheel
+      running build
+      running build_py
+      creating build
+      creating build/lib.linux-armv7l-cpython-310
+      creating build/lib.linux-armv7l-cpython-310/httptools
+      copying httptools/__init__.py -> build/lib.linux-armv7l-cpython-310/httptools
+      copying httptools/_version.py -> build/lib.linux-armv7l-cpython-310/httptools
+      creating build/lib.linux-armv7l-cpython-310/httptools/parser
+      copying httptools/parser/errors.py -> build/lib.linux-armv7l-cpython-310/httptools/parser
+      copying httptools/parser/__init__.py -> build/lib.linux-armv7l-cpython-310/httptools/parser
+      running egg_info
+      writing httptools.egg-info/PKG-INFO
+      writing dependency_links to httptools.egg-info/dependency_links.txt
+      writing requirements to httptools.egg-info/requires.txt
+      writing top-level names to httptools.egg-info/top_level.txt
+      reading manifest file 'httptools.egg-info/SOURCES.txt'
+      reading manifest template 'MANIFEST.in'
+      adding license file 'LICENSE'
+      writing manifest file 'httptools.egg-info/SOURCES.txt'
+      copying httptools/parser/parser.c -> build/lib.linux-armv7l-cpython-310/httptools/parser
+      copying httptools/parser/url_parser.c -> build/lib.linux-armv7l-cpython-310/httptools/parser
+      running build_ext
+      building 'httptools.parser.parser' extension
+      creating build/temp.linux-armv7l-cpython-310
+      creating build/temp.linux-armv7l-cpython-310/httptools
+      creating build/temp.linux-armv7l-cpython-310/httptools/parser
+      creating build/temp.linux-armv7l-cpython-310/vendor
+      creating build/temp.linux-armv7l-cpython-310/vendor/llhttp
+      creating build/temp.linux-armv7l-cpython-310/vendor/llhttp/src
+      gcc -pthread -Wno-unused-result -Wsign-compare -DNDEBUG -g -fwrapv -O3 -Wall -fPIC -I/tmp/pip-install-qewcieko/httptools_339b5d79ae7c4c9a98c772cdf2d5c5ef/vendor/llhttp/include -I/tmp/pip-install-qewcieko/httptools_339b5d79ae7c4c9a98c772cdf2d5c5ef/vendor/llhttp/src -I/usr/local/include/python3.10 -c httptools/parser/parser.c -o build/temp.linux-armv7l-cpython-310/httptools/parser/parser.o -O2
+      error: command 'gcc' failed: No such file or directory
+      [end of output]
+  
+  note: This error originates from a subprocess, and is likely not a problem with pip.
+[0m[91m  ERROR: Failed building wheel for httptools
+[0m  Building wheel for RVSecurity (pyproject.toml): started
+  Building wheel for RVSecurity (pyproject.toml): finished with status 'done'
+  Created wheel for RVSecurity: filename=RVSecurity-1.0-py3-none-any.whl size=1275 sha256=06af1a073c664d32b560ba6afea5efec286c26a16eebc23a230f47b8f8bbf4a6
+  Stored in directory: /tmp/pip-ephem-wheel-cache-auq7bqlx/wheels/54/22/64/9253b54b0ea57b3bb9b047ad8f48e3885ad012fbfe3efdb17f
+  Building wheel for pyyaml (pyproject.toml): started
+  Building wheel for pyyaml (pyproject.toml): finished with status 'done'
+  Created wheel for pyyaml: filename=PyYAML-6.0-cp310-cp310-linux_armv7l.whl size=45331 sha256=94a2914159bdada56ce8cc4f11431924c908027796d6266bdf9d1f70fc3d2b9e
+  Stored in directory: /root/.cache/pip/wheels/1d/f3/b4/4aea0992adbed14b36ce9c3857d3707c762a4374479230685d
+  Building wheel for regex (pyproject.toml): started
+  Building wheel for regex (pyproject.toml): finished with status 'error'
+[91m  error: subprocess-exited-with-error
+  
+  × Building wheel for regex (pyproject.toml) did not run successfully.
+  │ exit code: 1
+  ╰─> [16 lines of output]
+      running bdist_wheel
+      running build
+      running build_py
+      creating build
+      creating build/lib.linux-armv7l-cpython-310
+      creating build/lib.linux-armv7l-cpython-310/regex
+      copying regex_3/__init__.py -> build/lib.linux-armv7l-cpython-310/regex
+      copying regex_3/regex.py -> build/lib.linux-armv7l-cpython-310/regex
+      copying regex_3/_regex_core.py -> build/lib.linux-armv7l-cpython-310/regex
+      copying regex_3/test_regex.py -> build/lib.linux-armv7l-cpython-310/regex
+      running build_ext
+      building 'regex._regex' extension
+      creating build/temp.linux-armv7l-cpython-310
+      creating build/temp.linux-armv7l-cpython-310/regex_3
+      gcc -pthread -Wno-unused-result -Wsign-compare -DNDEBUG -g -fwrapv -O3 -Wall -fPIC -I/usr/local/include/python3.10 -c regex_3/_regex.c -o build/temp.linux-armv7l-cpython-310/regex_3/_regex.o
+      error: command 'gcc' failed: No such file or directory
+      [end of output]
+  
+  note: This error originates from a subprocess, and is likely not a problem with pip.
+[0m[91m  ERROR: Failed building wheel for regex
+[0m  Building wheel for typed-ast (pyproject.toml): started
+  Building wheel for typed-ast (pyproject.toml): finished with status 'error'
+[91m  error: subprocess-exited-with-error
+  
+  × Building wheel for typed-ast (pyproject.toml) did not run successfully.
+  │ exit code: 1
+  ╰─> [21 lines of output]
+      running bdist_wheel
+      running build
+      running build_py
+      creating build
+      creating build/lib.linux-armv7l-cpython-310
+      creating build/lib.linux-armv7l-cpython-310/typed_ast
+      copying typed_ast/ast3.py -> build/lib.linux-armv7l-cpython-310/typed_ast
+      copying typed_ast/ast27.py -> build/lib.linux-armv7l-cpython-310/typed_ast
+      copying typed_ast/conversions.py -> build/lib.linux-armv7l-cpython-310/typed_ast
+      copying typed_ast/__init__.py -> build/lib.linux-armv7l-cpython-310/typed_ast
+      creating build/lib.linux-armv7l-cpython-310/typed_ast/tests
+      copying ast3/tests/test_basics.py -> build/lib.linux-armv7l-cpython-310/typed_ast/tests
+      running build_ext
+      building '_ast27' extension
+      creating build/temp.linux-armv7l-cpython-310
+      creating build/temp.linux-armv7l-cpython-310/ast27
+      creating build/temp.linux-armv7l-cpython-310/ast27/Custom
+      creating build/temp.linux-armv7l-cpython-310/ast27/Parser
+      creating build/temp.linux-armv7l-cpython-310/ast27/Python
+      gcc -pthread -Wno-unused-result -Wsign-compare -DNDEBUG -g -fwrapv -O3 -Wall -fPIC -Iast27/Include -I/usr/local/include/python3.10 -c ast27/Custom/typed_ast.c -o build/temp.linux-armv7l-cpython-310/ast27/Custom/typed_ast.o
+      error: command 'gcc' failed: No such file or directory
+      [end of output]
+  
+  note: This error originates from a subprocess, and is likely not a problem with pip.
+[0m[91m  ERROR: Failed building wheel for typed-ast
+[0m  Building wheel for uvloop (pyproject.toml): started
+  Building wheel for uvloop (pyproject.toml): finished with status 'error'
+[91m  error: subprocess-exited-with-error
+  
+  × Building wheel for uvloop (pyproject.toml) did not run successfully.
+  │ exit code: 1
+  ╰─> [203 lines of output]
+      running bdist_wheel
+      running build
+      running build_py
+      creating build
+      creating build/lib.linux-armv7l-cpython-310
+      creating build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/_testbase.py -> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/_noop.py -> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/__init__.py -> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/_version.py -> build/lib.linux-armv7l-cpython-310/uvloop
+      running egg_info
+      writing uvloop.egg-info/PKG-INFO
+      writing dependency_links to uvloop.egg-info/dependency_links.txt
+      writing requirements to uvloop.egg-info/requires.txt
+      writing top-level names to uvloop.egg-info/top_level.txt
+      reading manifest file 'uvloop.egg-info/SOURCES.txt'
+      reading manifest template 'MANIFEST.in'
+      warning: no previously-included files matching '*' found under directory 'vendor/libuv/.git'
+      warning: no previously-included files matching '*' found under directory 'vendor/libuv/docs'
+      warning: no previously-included files matching '*' found under directory 'vendor/libuv/img'
+      adding license file 'LICENSE-APACHE'
+      adding license file 'LICENSE-MIT'
+      writing manifest file 'uvloop.egg-info/SOURCES.txt'
+      /tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/command/build_py.py:202: SetuptoolsDeprecationWarning:     Installing 'uvloop.handles' as data is deprecated, please list it in `packages`.
+          !!
+      
+      
+          ############################
+          # Package would be ignored #
+          ############################
+          Python recognizes 'uvloop.handles' as an importable package,
+          but it is not listed in the `packages` configuration of setuptools.
+      
+          'uvloop.handles' has been automatically added to the distribution only
+          because it may contain data files, but this behavior is likely to change
+          in future versions of setuptools (and therefore is considered deprecated).
+      
+          Please make sure that 'uvloop.handles' is included as a package by using
+          the `packages` configuration field or the proper discovery methods
+          (for example by using `find_namespace_packages(...)`/`find_namespace:`
+          instead of `find_packages(...)`/`find:`).
+      
+          You can read more about "package discovery" and "data files" on setuptools
+          documentation page.
+      
+      
+      !!
+      
+        check.warn(importable)
+      /tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/command/build_py.py:202: SetuptoolsDeprecationWarning:     Installing 'uvloop.includes' as data is deprecated, please list it in `packages`.
+          !!
+      
+      
+          ############################
+          # Package would be ignored #
+          ############################
+          Python recognizes 'uvloop.includes' as an importable package,
+          but it is not listed in the `packages` configuration of setuptools.
+      
+          'uvloop.includes' has been automatically added to the distribution only
+          because it may contain data files, but this behavior is likely to change
+          in future versions of setuptools (and therefore is considered deprecated).
+      
+          Please make sure that 'uvloop.includes' is included as a package by using
+          the `packages` configuration field or the proper discovery methods
+          (for example by using `find_namespace_packages(...)`/`find_namespace:`
+          instead of `find_packages(...)`/`find:`).
+      
+          You can read more about "package discovery" and "data files" on setuptools
+          documentation page.
+      
+      
+      !!
+      
+        check.warn(importable)
+      copying uvloop/cbhandles.pxd -> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/cbhandles.pyx [0m[91m-> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/dns.pyx -> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/errors.pyx -> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/loop.c -> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/loop.pxd -> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/loop.pyi -> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/loop.pyx -> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/lru.pyx -> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/pseudosock.pyx -> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/py.typed -> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/request.pxd -> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/request.pyx -> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/server.pxd -> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/server.pyx -> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/sslproto.pxd -> build/lib.linux-armv7l-cpython-310/uvloop
+      copying uvloop/sslproto.pyx -> build/lib.linux-armv7l-cpython-310/uvloop
+      creating build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/async_.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/async_.pyx -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/basetransport.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/basetransport.pyx -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/check.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/check.pyx -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/fsevent.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/fsevent.pyx -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/handle.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/handle.pyx -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/idle.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/idle.pyx -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/pipe.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/pipe.pyx -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/poll.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/poll.pyx -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/process.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/process.pyx -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/stream.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/stream.pyx -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/streamserver.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/streamserver.pyx -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/tcp.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/tcp.pyx -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/timer.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/timer.pyx -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/udp.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      copying uvloop/handles/udp.pyx -> build/lib.linux-armv7l-cpython-310/uvloop/handles
+      creating build/lib.linux-armv7l-cpython-310/uvloop/includes
+      copying uvloop/includes/__init__.py -> build/lib.linux-armv7l-cpython-310/uvloop/includes
+      copying uvloop/includes/compat.h -> build/lib.linux-armv7l-cpytho[0m[91mn-310/uvloop/includes
+      copying uvloop/includes/consts.pxi -> build/lib.linux-armv7l-cpython-310/uvloop/includes
+      copying uvloop/includes/debug.h -> build/lib.linux-armv7l-cpython-310/uvloop/includes
+      copying uvloop/includes/debug.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/includes
+      copying uvloop/includes/flowcontrol.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/includes
+      copying uvloop/includes/fork_handler.h -> build/lib.linux-armv7l-cpython-310/uvloop/includes
+      copying uvloop/includes/python.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/includes
+      copying uvloop/includes/stdlib.pxi -> build/lib.linux-armv7l-cpython-310/uvloop/includes
+      copying uvloop/includes/system.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/includes
+      copying uvloop/includes/uv.pxd -> build/lib.linux-armv7l-cpython-310/uvloop/includes
+      running build_ext
+      checking for a BSD-compatible install... /usr/bin/install -c
+      checking whether build environment is sane... yes
+      checking for a race-free mkdir -p... /bin/mkdir -p
+      checking for gawk... no
+      checking for mawk... mawk
+      checking whether make sets $(MAKE)... no
+      checking whether make supports nested variables... no
+      checking build system type... armv7l-unknown-linux-gnueabihf
+      checking host system type... armv7l-unknown-linux-gnueabihf
+      checking for gcc... no
+      checking for cc... no
+      checking for cl.exe... no
+      checking for clang... no
+      configure: error: in `/tmp/pip-install-qewcieko/uvloop_6e4ae1fc161b4ef294fcfbf8a26d31c7/build/libuv-armv7l':
+      configure: error: no acceptable C compiler found in $PATH
+      See `config.log' for more details
+      Traceback (most recent call last):
+        File "/usr/local/lib/python3.10/site-packages/pip/_vendor/pyproject_hooks/_in_process/_in_process.py", line 353, in <module>
+          main()
+        File "/usr/local/lib/python3.10/site-packages/pip/_vendor/pyproject_hooks/_in_process/_in_process.py", line 335, in main
+          json_out['return_val'] = hook(**hook_input['kwargs'])
+        File "/usr/local/lib/python3.10/site-packages/pip/_vendor/pyproject_hooks/_in_process/_in_process.py", line 251, in build_wheel
+          return _build_backend().build_wheel(wheel_directory, config_settings,
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/build_meta.py", line 413, in build_wheel
+          return self._build_with_temp_dir(['bdist_wheel'], '.whl',
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/build_meta.py", line 398, in _build_with_temp_dir
+          self.run_setup()
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/build_meta.py", line 484, in run_setup
+          super(_BuildMetaLegacyBackend,
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/build_meta.py", line 335, in run_setup
+          exec(code, locals())
+        File "<string>", line 272, in <module>
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/__init__.py", line 108, in setup
+          return distutils.core.setup(**attrs)
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/_distutils/core.py", line 185, in setup
+          return run_commands(dist)
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/_distutils/core.py", line 201, in run_commands
+          dist.run_commands()
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/_distutils/dist.py", line 969, in run_commands
+          self.run_command(cmd)
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/dist.py", line 1221, in run_command
+          super().run_command(command)
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/_distutils/dist.py", line 988, in run_command
+          cmd_obj.run()
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/wheel/bdist_wheel.py", line 325, in run
+          self.run_command("build")
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/_distutils/cmd.py", line 318, in run_command
+          self.distribution.run_command(command)
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/dist.py", line 1221, in run_command
+          super().run_command(command)
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/_distutils/dist.py", line 988, in run_command
+          cmd_obj.run()
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/_distutils/command/build.py", line 131, in run
+          self.run_command(cmd_name)
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/_distutils/cmd.py", line 318, in run_command
+          self.distribution.run_command(command)
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/dist.py", line 1221, in run_command
+          super().run_command(command)
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/_distutils/dist.py", line 988, in run_command
+          cmd_obj.run()
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/command/build_ext.py", line 84, in run
+          _build_ext.run(self)
+        File "/tmp/pip-build-env-608xydeh/overlay/lib/python3.10/site-packages/setuptools/_distutils/command/build_ext.py", line 345, in run
+          self.build_extensions()
+        File "<string>", line 231, in build_extensions
+        File "<string>", line 210, in build_libuv
+        File "/usr/local/lib/python3.10/subprocess.py", line 526, in run
+          raise CalledProcessError(retcode, process.args,
+      subprocess.CalledProcessError: Command '['./configure']' returned non-zero exit status 1.
+      [end of output]
+  
+  note: This error originates from a subprocess, and is likely not a problem with pip.
+[0m[91m  ERROR: Failed building wheel for uvloop
+[0m  Building wheel for websockets (pyproject.toml): started
+  Building wheel for websockets (pyproject.toml): finished with status 'done'
+  Created wheel for websockets: filename=websockets-10.4-cp310-cp310-linux_armv7l.whl size=95014 sha256=b8bb01b21af7872994a0892169c4f01b51098d68d545e1ae604b04c22c5e95bd
+  Stored in directory: /root/.cache/pip/wheels/96/93/2a/8128f9e5ffc812a2fd3220a2106baf495e2de53759ecedfc88
+Successfully built black paho-mqtt RVSecurity pyyaml websockets
+Failed to build httptools regex typed-ast uvloop
+[91mERROR: Could not build wheels for httptools, regex, typed-ast, uvloop, which is required to install pyproject.toml-based projects
+[0m
