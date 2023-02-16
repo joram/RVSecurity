@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import threading
-#import time
+import time
 import uvicorn
 #import alarm
 import mqttwebclient
@@ -14,7 +14,6 @@ from fastapi.middleware.cors import CORSMiddleware
 #import math
 
 timebase = 1672772504.9141579 #from replay file
-loopcount = 0
 
 app = FastAPI()
 
@@ -57,30 +56,28 @@ class DataResponse(BaseModel):
 
 #routine to generation Flow motion text
 def FlowMotion():
-    global loopcount
-    loopcount += 1
-    if loopcount > 4:
-        loopcount = 0
+    
+    CurrentTime = int(time.time()) % 5
 
-    if loopcount == 0:
+    if CurrentTime == 0:
         RightMotion = LeftMotion = "\u2002\u00A0\u2002\u00A0\u2002\u00a0\u2002"
-    elif loopcount == 1:
+    elif CurrentTime == 1:
         RightMotion = ">\u2002\u00A0\u2002\u00A0\u2002\u00A0"
         LeftMotion  = "\u2002\u00A0\u2002\u00A0\u2002\u00A0<"
-    elif loopcount == 2: 
+    elif CurrentTime == 2: 
         RightMotion = "> >\u2002\u00A0\u2002\u00A0"
         LeftMotion  = "\u2002\u00A0\u2002\u00A0< <"
-    elif loopcount == 3:
+    elif CurrentTime == 3:
         RightMotion = "> > >\u2002\u00A0"
         LeftMotion  = "\u2002\u00A0< < <"
-    elif loopcount == 4:
+    elif CurrentTime == 4:
         RightMotion = "> > > >"
         LeftMotion  = "< < < <"
     return(RightMotion, LeftMotion)
 
 @app.get("/data")
 async def data() -> DataResponse:
-    global timesbase, loopcount
+    global timesbase, LastTime
 
     #print('mqttwebclient.', mqttwebclient.AliasData["_var07"])
     #print(type(mqttwebclient.AliasData["_var02"]),type(mqttwebclient.AliasData["_var03"]), type(mqttwebclient.AliasData["_var15"]), type(mqttwebclient.AliasData["_var16"]))
