@@ -12,6 +12,7 @@ from pprint import pprint
 #globals
 topic_prefix = 'RVC'
 msg_counter = 0
+AllData = {}
 TargetTopics = {}
 MQTTNameToAliasName = {}
 AliasData = {}
@@ -22,7 +23,7 @@ debug = 0
 class mqttclient():
 
     def __init__(self, initmode, mqttbroker,mqttport, mqtttopicjsonfile, varIDstr, topic_prefix, debug):
-        global client, AliasData, MQTTNameToAliasName, TargetTopics, mode
+        global client, AllData, AliasData, MQTTNameToAliasName, TargetTopics, mode
 
         mode = initmode
         # read in the json file that defines the topics and variables of interest
@@ -36,6 +37,7 @@ class mqttclient():
         except:
             print('dgn_variables.json file not found -- exiting')
             exit()
+        AllData = data
 
         for item in data:
             if "instance" in data[item]:
@@ -52,6 +54,8 @@ class mqttclient():
                     AliasData[tmp] = ''
                     MQTTNameToAliasName[local_topic] = tmp
         if debug > 0:
+            #print('>>AllData:')
+            #pprint(AllData)
             print('>>TargetTopics:')
             pprint(TargetTopics)
             print('>>MQTTnameToAliasName:')
@@ -127,8 +131,11 @@ class mqttclient():
         else:   
             topic = topic_prefix + '/' + payload["name"]             
 
-        if debug > 3:
+        if debug > 0:
             print('Publishing: ', topic, payload)
+        #quick check that topic is in TargetTopics
+        if topic not in TargetTopics:
+            print('Error: Publishing topic not in  specified json file: ', topic)
         client.publish(topic, json.dumps(payload), qos, retain)
                 
     def run_mqtt_infinite(self):
@@ -144,15 +151,20 @@ if __name__ == "__main__":
         RVC_Client.run_mqtt_infinite()
     else:
         while True:
-            time.sleep(1)
-            #update target dictionary in DSN style format: simple dictonary  key name =  then topic and value pairs
-            _var18Batt_voltage = 12.0 + random.random()
-            _var19Batt_current =  0.5
-            _var20Batt_charge = 100
-            battery_status = {                         
+            time.sleep(6)
+            #update AllData disctionary with new variable data
+            """  target topic from json file 
+            "BATTERY_STATUS":{                         
                     "instance":1,
                     "name":"BATTERY_STATUS",
-                    "DC_voltage":                                               _var18Batt_voltage,
-                    "DC_current":                                               _var19Batt_current,
-                    "State_of_charge":                                          _var20Batt_charge}
-            RVC_Client.pub(battery_status)
+                    "DC_voltage":                                               "_var18Batt_voltage",
+                    "DC_current":                                               "_var19Batt_current",
+                    "State_of_charge":                                          "_var20Batt_charge",
+                    "Status":                                                    ""},
+            """ 
+            #Update the dictionary with new data and publish
+            AllData['BATTERY_STATUS']["DC_voltage"] = 12.0 + random.random()
+            AllData['BATTERY_STATUS']["DC_current"] =  20 * random.random() - 10
+            AllData['BATTERY_STATUS']["State_of_charge"] = 100 - random.random()*100
+            AllData['BATTERY_STATUS']["Status"] = "OK"
+            RVC_Client.pub(AllData['BATTERY_STATUS'])

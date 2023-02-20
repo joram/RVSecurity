@@ -113,14 +113,19 @@ async def data() -> DataResponse:
     SolarPower = 0
     DC_Load = (DC_Charger_power + SolarPower)
     
+    HoursRemaining = 10.5
     
     Invert_status_num = mqttclient.AliasData["_var16Invert_status_num"]                                   #DC Invertor numerical state"
-    RightMotion, LeftMotion = FlowMotion()                 
+    RightMotion, LeftMotion = FlowMotion()  
+    if BatteryPower > 0:
+        BatteryFlow = LeftMotion
+    else:
+        BatteryFlow = RightMotion
+
     if Invert_status_num == 1:          #DC Passthrough
         InvertFlow = LeftMotion
         ShorePwrFlow = '|'
         SolarPwrFlow = '?'                      #Solar power Flow
-        BatteryFlow = RightMotion                        #Battery power Flow
         LoadACPowerStr = str('%.0f' % Invert_AC_power)
 
 
@@ -128,14 +133,12 @@ async def data() -> DataResponse:
         InvertFlow = RightMotion
         ShorePwrFlow = RightMotion
         SolarPwrFlow = '?'                      #Solar power Flow
-        BatteryFlow = '?'                       #Battery power Flow
         LoadACPowerStr = '??'
 
     else:
         InvertFlow = '??'
         ShorePwrFlow = ''                       
         SolarPwrFlow = '?'                      #Solar power Flow
-        BatteryFlow = '?'                        #Battery power Flow
         LoadACPowerStr = '??'
 
 
@@ -148,19 +151,21 @@ async def data() -> DataResponse:
         var6 =SolarPwrFlow,                  #solar power Flow
         var7 =str('%.1f' % mqttclient.AliasData["_var14Invert_DC_Volt"]) + " Volts DC",
         var8 =str('%.0f' % DC_Load) + ' Watts + Solar=0',
-        var9 ="not used",
+        var9 ="not known watts",
         var10=InvertFlow,                                         #flow annimation   
         var11=mqttclient.AliasData["_var15Invert_status_name"],
         var12= str('%.0f' % InvertorMaxPower) + " Watts Transfer",
         var13=str(mqttclient.AliasData["_var07Red"]) + " Red Lamp", 
         var14=str(mqttclient.AliasData["_var08Yellow"]) + " Yellow Lamp", 
-        var15=str(mqttclient.AliasData["_var20Batt_charge"]) + " Battery  % remaining",
-        var16= str('%.0f' % BatteryPower) +' Watts Battery',
-        var17= '?? Est time reamining',
+        #battery variables begin
+        var15=str(HoursRemaining) + ' Est hours reamining',
+        var16= str('?? Battery Status'),
+        var17= 'unused',
         var18= BatteryFlow,                        #Battery power Flow
-        var19= str('%.2f' % float(mqttclient.AliasData["_var18Batt_voltage"])) + " Volts Battery xxx",
+        var19= str('%.2f' % (BatteryPower)) + " Watts",
+        #battery variables end 
         var20=str('%.1f' % ((float(mqttclient.AliasData["_var01Timestamp"])-timebase)/60)) + " Time (min)",
-        battery_percent= 55,
+        battery_percent= int(mqttclient.AliasData["_var20Batt_charge"]),
     )
 
 @app.get("/status")

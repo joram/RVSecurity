@@ -62,7 +62,7 @@ function App() {
       >
         <div className="battery">
           <BatteryGauge
-            value={data.batery_percent}
+            value={data.battery_percent}
             size={150}
             padding={5}
             aspectRatio={0.42}
