@@ -3,7 +3,7 @@ import threading
 import time
 import uvicorn
 #import alarm
-import mqttwebclient
+import mqttclient
 
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -79,25 +79,25 @@ def FlowMotion():
 async def data() -> DataResponse:
     global timesbase, LastTime
 
-    #print('mqttwebclient.', mqttwebclient.AliasData["_var07"])
-    #print(type(mqttwebclient.AliasData["_var02"]),type(mqttwebclient.AliasData["_var03"]), type(mqttwebclient.AliasData["_var15"]), type(mqttwebclient.AliasData["_var16"]))
+    #print('mqttclient.', mqttclient.AliasData["_var07"])
+    #print(type(mqttclient.AliasData["_var02"]),type(mqttclient.AliasData["_var03"]), type(mqttclient.AliasData["_var15"]), type(mqttclient.AliasData["_var16"]))
    
     
 
-    Charger_AC_current=float(mqttwebclient.AliasData["_var02Charger_AC_current"])                                #AC charger RMS current" 
-    Invert_AC_voltage=float(mqttwebclient.AliasData["_var10Invert_AC_voltage"])                             #AC invertor RMS voltage" 
+    Charger_AC_current=float(mqttclient.AliasData["_var02Charger_AC_current"])                                #AC charger RMS current" 
+    Invert_AC_voltage=float(mqttclient.AliasData["_var10Invert_AC_voltage"])                             #AC invertor RMS voltage" 
     Charger_AC_power = Invert_AC_voltage * Charger_AC_current                                                     #AC charger power   
    
-    Invert_AC_current=float(mqttwebclient.AliasData["_var09Invert_AC_current"])                                #AC invertor RMS current"
+    Invert_AC_current=float(mqttclient.AliasData["_var09Invert_AC_current"])                                #AC invertor RMS current"
     Invert_AC_power=Invert_AC_voltage *Invert_AC_current                                                      #AC invertor power
 
     Total_AC_power = Charger_AC_power + Invert_AC_power
     
-    Charger_current=(mqttwebclient.AliasData["_var04Charger_current"])                                   #DC charger  current"  
-    DC_volts=float(mqttwebclient.AliasData["_var05Charger_voltage"])                                #DC charger  voltage" 
+    Charger_current=(mqttclient.AliasData["_var04Charger_current"])                                   #DC charger  current"  
+    DC_volts=float(mqttclient.AliasData["_var05Charger_voltage"])                                #DC charger  voltage" 
     DC_Charger_power = DC_volts * Charger_current                                                     #DC charger power
 
-    Invert_DC_Amp=float(mqttwebclient.AliasData["_var13Invert_DC_Amp"])                               #DC Invertor current"
+    Invert_DC_Amp=float(mqttclient.AliasData["_var13Invert_DC_Amp"])                               #DC Invertor current"
     Invert_DC_power = DC_volts * Invert_DC_Amp                                                   #DC Invertor power
 
     Total_DC_power = DC_Charger_power + Invert_DC_power
@@ -105,7 +105,7 @@ async def data() -> DataResponse:
     InvertorMaxPower = max(Total_AC_power, Total_DC_power)
 
     try:
-        BatteryPower = (mqttwebclient.AliasData["_var18Batt_voltage"] * mqttwebclient.AliasData["_var19Batt_current"])                                #Battery power"
+        BatteryPower = (mqttclient.AliasData["_var18Batt_voltage"] * mqttclient.AliasData["_var19Batt_current"])                                #Battery power"
     except:
         BatteryPower = 0.0
 
@@ -114,7 +114,7 @@ async def data() -> DataResponse:
     DC_Load = (DC_Charger_power + SolarPower)
     
     
-    Invert_status_num = mqttwebclient.AliasData["_var16Invert_status_num"]                                   #DC Invertor numerical state"
+    Invert_status_num = mqttclient.AliasData["_var16Invert_status_num"]                                   #DC Invertor numerical state"
     RightMotion, LeftMotion = FlowMotion()                 
     if Invert_status_num == 1:          #DC Passthrough
         InvertFlow = LeftMotion
@@ -142,24 +142,24 @@ async def data() -> DataResponse:
     return DataResponse(
         var1 ='?? Shore Watts',                            #shore power (watts)
         var2 =ShorePwrFlow,                  #shorepower or generator Flow
-        var3 =str('%.0f' % mqttwebclient.AliasData["_var10Invert_AC_voltage"]) + " Volts AC",
+        var3 =str('%.0f' % mqttclient.AliasData["_var10Invert_AC_voltage"]) + " Volts AC",
         var4 =LoadACPowerStr + ' Watts AC Load',  
         var5 =str(SolarPower) + ' Watts Solar',
         var6 =SolarPwrFlow,                  #solar power Flow
-        var7 =str('%.1f' % mqttwebclient.AliasData["_var14Invert_DC_Volt"]) + " Volts DC",
+        var7 =str('%.1f' % mqttclient.AliasData["_var14Invert_DC_Volt"]) + " Volts DC",
         var8 =str('%.0f' % DC_Load) + ' Watts + Solar=0',
         var9 ="not used",
         var10=InvertFlow,                                         #flow annimation   
-        var11=mqttwebclient.AliasData["_var15Invert_status_name"],
+        var11=mqttclient.AliasData["_var15Invert_status_name"],
         var12= str('%.0f' % InvertorMaxPower) + " Watts Transfer",
-        var13=str(mqttwebclient.AliasData["_var07Red"]) + " Red Lamp", 
-        var14=str(mqttwebclient.AliasData["_var08Yellow"]) + " Yellow Lamp", 
-        var15=str(mqttwebclient.AliasData["_var20Batt_charge"]) + " Battery  % remaining",
+        var13=str(mqttclient.AliasData["_var07Red"]) + " Red Lamp", 
+        var14=str(mqttclient.AliasData["_var08Yellow"]) + " Yellow Lamp", 
+        var15=str(mqttclient.AliasData["_var20Batt_charge"]) + " Battery  % remaining",
         var16= str('%.0f' % BatteryPower) +' Watts Battery',
         var17= '?? Est time reamining',
         var18= BatteryFlow,                        #Battery power Flow
-        var19= '?? Watts Chassie Gen',
-        var20=str('%.1f' % ((float(mqttwebclient.AliasData["_var01Timestamp"])-timebase)/60)) + " Time (min)",
+        var19= str('%.2f' % float(mqttclient.AliasData["_var18Batt_voltage"])) + " Volts Battery xxx",
+        var20=str('%.1f' % ((float(mqttclient.AliasData["_var01Timestamp"])-timebase)/60)) + " Time (min)",
         battery_percent= 55,
     )
 
@@ -173,9 +173,9 @@ app.mount("/", StaticFiles(directory="build"), name="ui")
 
 if __name__ == "__main__":
     #kick off threads here  
-    # webmqttclient("localhost", 1883, "dgn_variables.json",'_var', 'RVC', True, debug)  
-    t1 = threading.Thread(target=mqttwebclient.webmqttclient("localhost", 1883, "dgn_variables.json",'_var', 'RVC', True, 0).run_webMQTT_infinite)
-    #t1 = threading.Thread(target=mqttwebclient.webmqttclient().printhello)
+    # mqttclient("pub","localhost", 1883, "dgn_variables.json",'_var', 'RVC', debug) 
+    t1 = threading.Thread(target=mqttclient.mqttclient("sub","localhost", 1883, "dgn_variables.json",'_var', 'RVC', 0).run_mqtt_infinite)
+    #t1 = threading.Thread(target=mqttclient.mqttclient().printhello)
     t1.start()
 
     # "0.0.0.0" => accept requests from any IP addr

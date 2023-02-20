@@ -2,7 +2,9 @@
 
 import os
 import time
+import random
 import json
+import re       # regular expressions   
 import paho.mqtt.client as mqtt
 from pprint import pprint
 
@@ -14,24 +16,16 @@ TargetTopics = {}
 MQTTNameToAliasName = {}
 AliasData = {}
 client = None
-
+mode = 'sub'
 debug = 0
 
-class webmqttclient():
+class mqttclient():
 
-    def __init__(self,mqttbroker,mqttport, mqtttopicjsonfile, varIDstr, topic_prefix, append_instance, debug):
-        global client, AliasData, MQTTNameToAliasName, TargetTopics
+    def __init__(self, initmode, mqttbroker,mqttport, mqtttopicjsonfile, varIDstr, topic_prefix, debug):
+        global client, AliasData, MQTTNameToAliasName, TargetTopics, mode
 
-        client = mqtt.Client()
-        client.on_connect = self._on_connect
-        client.on_message = self._on_message
-
-        try:
-            client.connect(mqttbroker,mqttport, 60)
-        except:
-            print("Can't connect to MQTT Broker/port -- exiting",mqttbroker,":",mqttport)
-            exit()
-
+        mode = initmode
+        # read in the json file that defines the topics and variables of interest
         try:    
             with open(mqtttopicjsonfile,"r") as newfile: 
                 try:
@@ -43,9 +37,8 @@ class webmqttclient():
             print('dgn_variables.json file not found -- exiting')
             exit()
 
-       
         for item in data:
-            if append_instance and "instance" in data[item]:
+            if "instance" in data[item]:
                 topic = topic_prefix + '/' + item + '/' + str(data[item]["instance"])
             else:   
                 topic = topic_prefix + '/' + item
@@ -67,9 +60,25 @@ class webmqttclient():
             pprint(AliasData)
             print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
 
+        # setup the MQTT client
+        client = mqtt.Client()
+        client.on_connect = self._on_connect
+        client.on_message = self._on_message
+
+        try:
+            client.connect(mqttbroker,mqttport, 60)
+        except:
+            print("Can't connect to MQTT Broker/port -- exiting",mqttbroker,":",mqttport)
+            exit()
+
+        
+
+       
+        
+
     # The callback for when the client receives a CONNACK response from the server.
     def _on_connect(self, client, userdata, flags, rc):
-        global TargetTopics
+        global TargetTopics, mode
 
         if rc == 0:
             print("_on_connect to MQTT Server - OK")
@@ -78,10 +87,11 @@ class webmqttclient():
         # Subscribing in on_connect() means that if we lose the connection and
         # reconnect then subscriptions will be renewed.
         #client.subscribe("$SYS/#")
-        for name in TargetTopics:
-            if debug>3:
-                print('Subscribing to: ', name)
-            client.subscribe(name,0)
+        if mode == 'sub':
+            for name in TargetTopics:
+                if debug>3:
+                    print('Subscribing to: ', name)
+                client.subscribe(name,0)
         print('Running...')
 
     # The callback for when a PUBLISH message is received from the MQTT server.
@@ -109,21 +119,40 @@ class webmqttclient():
                 os.sys.stdout.flush()
                 msg_counter = 0
     
-    def pub(self,topic, payload, qos=0, retain=False):
-        global client, debug
+    def pub(self, payload, qos=0, retain=False):
+        global client, debug, topic_prefix
+                
+        if "instance" in payload:
+            topic = topic_prefix + '/' + payload["name"] + '/' + str(payload["instance"])
+        else:   
+            topic = topic_prefix + '/' + payload["name"]             
+
         if debug > 3:
             print('Publishing: ', topic, payload)
-        if payload[0:3] == '_var':
-            payload = AliasData[payload]
-        client.publish(topic, payload, qos, retain)
-        #additional changes needed in here TODO. Issue is format stored on MQTT server is different than format needed for web
-        
-    def run_webMQTT_infinite(self):
+        client.publish(topic, json.dumps(payload), qos, retain)
+                
+    def run_mqtt_infinite(self):
         global client
         client.loop_forever()
 
 
 if __name__ == "__main__":
     debug = 1
-    RVCWeb = webmqttclient("localhost", 1883, "dgn_variables.json",'_var', 'RVC', True, debug)
-    RVCWeb.run_webMQTT_infinite()
+    mode = 'pub'
+    RVC_Client = mqttclient(mode,"localhost", 1883, "dgn_variables.json",'_var', 'RVC', debug)
+    if mode == 'sub':
+        RVC_Client.run_mqtt_infinite()
+    else:
+        while True:
+            time.sleep(1)
+            #update target dictionary in DSN style format: simple dictonary  key name =  then topic and value pairs
+            _var18Batt_voltage = 12.0 + random.random()
+            _var19Batt_current =  0.5
+            _var20Batt_charge = 100
+            battery_status = {                         
+                    "instance":1,
+                    "name":"BATTERY_STATUS",
+                    "DC_voltage":                                               _var18Batt_voltage,
+                    "DC_current":                                               _var19Batt_current,
+                    "State_of_charge":                                          _var20Batt_charge}
+            RVC_Client.pub(battery_status)
