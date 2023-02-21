@@ -113,11 +113,11 @@ async def data() -> DataResponse:
     SolarPower = 0
     DC_Load = (DC_Charger_power + SolarPower)
     
-    HoursRemaining = 10.5
+    HoursRemaining = 11.5
     
     Invert_status_num = mqttclient.AliasData["_var16Invert_status_num"]                                   #DC Invertor numerical state"
     RightMotion, LeftMotion = FlowMotion()  
-    if BatteryPower > 0:
+    if BatteryPower < 0:                  #Battery charging if negative power
         BatteryFlow = LeftMotion
     else:
         BatteryFlow = RightMotion
@@ -140,7 +140,6 @@ async def data() -> DataResponse:
         ShorePwrFlow = ''                       
         SolarPwrFlow = '?'                      #Solar power Flow
         LoadACPowerStr = '??'
-
 
     return DataResponse(
         var1 ='?? Shore Watts',                            #shore power (watts)

@@ -170,7 +170,7 @@
                     "dgn":"1FEB3",                        
                     "instance":1,
                     "name":"SOLAR_CONTROLLER_STATUS",
-                    "DC_voltage":                                               "_var23Batt_voltage",
-                    "DC_current":                                               "_var24Batt_current"}
+                    "DC_voltage":                                               "_var23Solar_voltage",
+                    "DC_current":                                               "_var24Solar_current"}
 
 }

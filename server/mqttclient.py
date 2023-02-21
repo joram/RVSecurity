@@ -1,9 +1,6 @@
 #mqtt client to read values of interest from broker
 
-import os
-import time
-import random
-import json
+import os, argparse,  time, random, json
 import re       # regular expressions   
 import paho.mqtt.client as mqtt
 from pprint import pprint
@@ -93,7 +90,7 @@ class mqttclient():
         #client.subscribe("$SYS/#")
         if mode == 'sub':
             for name in TargetTopics:
-                if debug>3:
+                if debug>1:
                     print('Subscribing to: ', name)
                 client.subscribe(name,0)
         print('Running...')
@@ -101,14 +98,14 @@ class mqttclient():
     # The callback for when a PUBLISH message is received from the MQTT server.
     def _on_message(self, client, userdata, msg):
         global TargetTopics, msg_counter, AliasData, MQTTNameToAliasName
-        if debug>3:
+        if debug>2:
             print(msg.topic+ " " + str(msg.payload))
         msg_dict = json.loads(msg.payload.decode('utf-8'))
 
         for item in TargetTopics[msg.topic]:
             if item == 'instance':
                 break
-            if debug>3:
+            if debug>2:
                 print(item,'= ', msg_dict[item])
             tmp = msg.topic + '/' + item
             AliasData[MQTTNameToAliasName[tmp]] = msg_dict[item]
@@ -144,9 +141,25 @@ class mqttclient():
 
 
 if __name__ == "__main__":
-    debug = 1
-    mode = 'pub'
-    RVC_Client = mqttclient(mode,"localhost", 1883, "dgn_variables.json",'_var', 'RVC', debug)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-b", "--broker", default = "localhost", help="MQTT Broker Host")
+    parser.add_argument("-p", "--port", default = 1883, type=int, help="MQTT Broker Port")
+    parser.add_argument("-d", "--debug", default = 0, type=int, choices=[0, 1, 2, 3], help="debug level")
+    parser.add_argument("-m", "--mode", default = "sub", help="sub or pub")
+    parser.add_argument("-s", "--jsonvarfile", default = "./dgn_variables.json", help="RVC Spec file")
+    parser.add_argument("-t", "--topic", default = "RVC", help="MQTT topic prefix")
+    args = parser.parse_args()
+
+    broker = args.broker
+    port = args.port
+    debug = args.debug
+    if args.mode == 'sub':
+        mode = 'sub'
+    else:
+        mode = 'pub'
+    jasonvarfile = args.jsonvarfile
+    mqttTopic = args.topic
+    RVC_Client = mqttclient(mode,broker, port, "dgn_variables.json",'_var', mqttTopic, debug)
     if mode == 'sub':
         RVC_Client.run_mqtt_infinite()
     else:
