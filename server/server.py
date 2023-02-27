@@ -57,7 +57,7 @@ class DataResponse(BaseModel):
 #routine to generation Flow motion text
 def FlowMotion():
     
-    CurrentTime = int(time.time()) % 5
+    CurrentTime = int(time.time()) % 5          #determines motion update period; updates per second
 
     if CurrentTime == 0:
         RightMotion = LeftMotion = "\u2002\u00A0\u2002\u00A0\u2002\u00a0\u2002"
@@ -74,6 +74,56 @@ def FlowMotion():
         RightMotion = "> > > >"
         LeftMotion  = "< < < <"
     return(RightMotion, LeftMotion)
+
+def GenAllFlows(BatteryPower, SolarPower, Invert_AC_power, ShorePower, GenPower):
+    Invert_status_num = mqttclient.AliasData["_var16Invert_status_num"]                                   #DC Invertor numerical state"
+    """note: Invert_status_num meaning = 
+        0 - Disabled
+        1 - Invert
+        2 - AC passthru
+        3 - APS Only
+        4 - Load sense (Unit is waiting for a load.)
+        5 - Waiting to Invert
+        6. Generator support
+    """
+    Invert_status_str = mqttclient.AliasData["_var15Invert_status_name"]                                  #Invertor string meaning"
+
+    RightMotion, LeftMotion = FlowMotion()  
+    if BatteryPower < 0:                  #Battery charging if negative power  TODO check if this is correct
+        BatteryFlow = LeftMotion
+    else:
+        BatteryFlow = RightMotion
+
+    if Invert_status_num == 1:          #DC Passthrough
+        if BatteryPower < 0:                  #Battery charging if negative power
+            Invert_status_str = 'Now: Alternator Powered'
+        else:
+            Invert_status_str = 'Now: Battery Powered'
+        InvertPwrFlow = LeftMotion
+        ShorePwrFlow = '|'
+        GeneratorPwrFlow = '|'
+        SolarPwrFlow = RightMotion      #Solar power Flow
+        LoadACPowerStr = str('%.0f' % Invert_AC_power)
+
+
+    elif Invert_status_num == 2:        #AC Passthrough
+        Invert_status_str = 'Now: Shore Powered'
+        InvertPwrFlow = RightMotion
+        ShorePwrFlow = RightMotion
+        GeneratorPwrFlow = LeftMotion
+        SolarPwrFlow = '?'                      #Solar power Flow
+        LoadACPowerStr = '??'
+
+    else:
+        
+        InvertPwrFlow = '??'
+        ShorePwrFlow = '?'
+        GeneratorPwrFlow = '?'
+        ShorePwrFlow = ''                       
+        SolarPwrFlow = '?'                      #Solar power Flow
+        LoadACPowerStr = '??'
+
+    return(BatteryFlow, InvertPwrFlow, ShorePwrFlow, GeneratorPwrFlow, SolarPwrFlow, Invert_status_str, LoadACPowerStr)
 
 @app.get("/data")
 async def data() -> DataResponse:
@@ -109,40 +159,18 @@ async def data() -> DataResponse:
     except:
         BatteryPower = 0.0
 
-
+    ShorePower = 0
+    GenPower = 0
     SolarPower = 0
     DC_Load = (DC_Charger_power + SolarPower)
     
     HoursRemaining = 11.5
-    
-    Invert_status_num = mqttclient.AliasData["_var16Invert_status_num"]                                   #DC Invertor numerical state"
-    RightMotion, LeftMotion = FlowMotion()  
-    if BatteryPower < 0:                  #Battery charging if negative power
-        BatteryFlow = LeftMotion
-    else:
-        BatteryFlow = RightMotion
 
-    if Invert_status_num == 1:          #DC Passthrough
-        InvertFlow = LeftMotion
-        ShorePwrFlow = '|'
-        SolarPwrFlow = '?'                      #Solar power Flow
-        LoadACPowerStr = str('%.0f' % Invert_AC_power)
+    (BatteryFlow, InvertPwrFlow, ShorePwrFlow, GeneratorPwrFlow, SolarPwrFlow, Invert_status_str, LoadACPowerStr) = GenAllFlows(BatteryPower, SolarPower, Invert_AC_power, ShorePower, GenPower)
 
-
-    elif Invert_status_num == 2:        #AC Passthrough
-        InvertFlow = RightMotion
-        ShorePwrFlow = RightMotion
-        SolarPwrFlow = '?'                      #Solar power Flow
-        LoadACPowerStr = '??'
-
-    else:
-        InvertFlow = '??'
-        ShorePwrFlow = ''                       
-        SolarPwrFlow = '?'                      #Solar power Flow
-        LoadACPowerStr = '??'
 
     return DataResponse(
-        var1 ='?? Shore Watts',                            #shore power (watts)
+        var1 =max(ShorePower, GenPower),                            #shore power (watts)
         var2 =ShorePwrFlow,                  #shorepower or generator Flow
         var3 =str('%.0f' % mqttclient.AliasData["_var10Invert_AC_voltage"]) + " Volts AC",
         var4 =LoadACPowerStr + ' Watts AC Load',  
@@ -150,16 +178,16 @@ async def data() -> DataResponse:
         var6 =SolarPwrFlow,                  #solar power Flow
         var7 =str('%.1f' % mqttclient.AliasData["_var14Invert_DC_Volt"]) + " Volts DC",
         var8 =str('%.0f' % DC_Load) + ' Watts + Solar=0',
-        var9 ="not known watts",
-        var10=InvertFlow,                                         #flow annimation   
-        var11=mqttclient.AliasData["_var15Invert_status_name"],
+        var9 ="? Watts",        # TODO Alternator power
+        var10=InvertPwrFlow,                                         #flow annimation   
+        var11=Invert_status_str,
         var12= str('%.0f' % InvertorMaxPower) + " Watts Transfer",
         var13=str(mqttclient.AliasData["_var07Red"]) + " Red Lamp", 
         var14=str(mqttclient.AliasData["_var08Yellow"]) + " Yellow Lamp", 
         #battery variables begin
         var15=str(HoursRemaining) + ' Est hours reamining',
         var16= str('?? Battery Status'),
-        var17= 'unused',
+        var17= GeneratorPwrFlow,
         var18= BatteryFlow,                        #Battery power Flow
         var19= str('%.2f' % (BatteryPower)) + " Watts",
         #battery variables end 

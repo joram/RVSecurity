@@ -9,9 +9,9 @@ from pprint import pprint
 #globals
 topic_prefix = 'RVC'
 msg_counter = 0
-AllData = {}
 TargetTopics = {}
 MQTTNameToAliasName = {}
+AllData = {}
 AliasData = {}
 client = None
 mode = 'sub'
@@ -27,22 +27,21 @@ class mqttclient():
         try:    
             with open(mqtttopicjsonfile,"r") as newfile: 
                 try:
-                    data = json.load(newfile)
+                    AllData = json.load(newfile)
                 except: 
                     print('Json file format error --- exiting')
                     exit()
         except:
             print('dgn_variables.json file not found -- exiting')
             exit()
-        AllData = data
 
-        for item in data:
-            if "instance" in data[item]:
-                topic = topic_prefix + '/' + item + '/' + str(data[item]["instance"])
+        for item in AllData:
+            if "instance" in AllData[item]:
+                topic = topic_prefix + '/' + item + '/' + str(AllData[item]["instance"])
             else:   
                 topic = topic_prefix + '/' + item
-            for entryvar in data[item]:
-                tmp = data[item][entryvar]
+            for entryvar in AllData[item]:
+                tmp = AllData[item][entryvar]
                 if  isinstance(tmp, str) and tmp.startswith(varIDstr):
                     if topic not in TargetTopics:
                         TargetTopics[topic] = {}
@@ -51,7 +50,7 @@ class mqttclient():
                     AliasData[tmp] = ''
                     MQTTNameToAliasName[local_topic] = tmp
         if debug > 0:
-            #print('>>AllData:')
+            #print('>>All Data:')
             #pprint(AllData)
             print('>>TargetTopics:')
             pprint(TargetTopics)
@@ -144,8 +143,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-b", "--broker", default = "localhost", help="MQTT Broker Host")
     parser.add_argument("-p", "--port", default = 1883, type=int, help="MQTT Broker Port")
-    parser.add_argument("-d", "--debug", default = 0, type=int, choices=[0, 1, 2, 3], help="debug level")
-    parser.add_argument("-m", "--mode", default = "sub", help="sub or pub")
+    parser.add_argument("-d", "--debug", default = 1, type=int, choices=[0, 1, 2, 3], help="debug level")
+    parser.add_argument("-m", "--mode", default = "pub", help="sub or pub")
     parser.add_argument("-s", "--jsonvarfile", default = "./dgn_variables.json", help="RVC Spec file")
     parser.add_argument("-t", "--topic", default = "RVC", help="MQTT topic prefix")
     args = parser.parse_args()
