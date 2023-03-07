@@ -160,17 +160,23 @@
  "ATS_AC_STATUS_1": {"data": "4170090A7D001EFF",
                     "dgn": "1FFAD",
                     "instance": 1,
-                    "line": "00",
+                    "line":                                         "_var21ATS_Line",
                     "line definition": 1,
                     "name": "ATS_AC_STATUS_1",
-                    "rms current":                                  "_var21ATS_AC_current",
-                    "rms voltage":                                  "_var22ATS_AC_voltage",
+                    "rms current":                                  "_var22ATS_AC_current",
+                    "rms voltage":                                  "_var23ATS_AC_voltage",
                     "timestamp": "1672774554.8647683"},
+ "RV_Loads": {
+                    "instance": 1,
+                    "name": "RV_Loads",
+                    "AC Load":                                  "_var24RV_Loads_AC",
+                    "DC Load":                                  "_var25RV_Loads_DC",
+                    "timestamp": "1672774554.8647683"},                    
  "SOLAR_CONTROLLER_STATUS":{ 
                     "dgn":"1FEB3",                        
                     "instance":1,
                     "name":"SOLAR_CONTROLLER_STATUS",
-                    "DC_voltage":                                               "_var23Solar_voltage",
-                    "DC_current":                                               "_var24Solar_current"}
+                    "DC_voltage":                                               "_var26Solar_voltage",
+                    "DC_current":                                               "_var27Solar_current"}
 
 }

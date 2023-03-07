@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import './App.css';
-import Sophie from "./Sophie2.svg";
+import Sophie from "./Sophie1.svg";
 import SVGDiagram from "./SVGDiagram";
 import BatteryGauge from "react-battery-gauge";
 
@@ -65,7 +65,7 @@ function App() {
             value={data.battery_percent}
             size={150}
             padding={5}
-            aspectRatio={0.42}
+            aspectRatio={0.52}
           />
         </div>
 
