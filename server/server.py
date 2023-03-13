@@ -10,10 +10,22 @@ from pydantic import BaseModel
 from starlette.responses import RedirectResponse
 from starlette.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-#import random
+import random
 #import math
 
+#Global constants
+BATT_VOLTS  = 12.0  #Battery voltage
+BATT_AH     = 3000  #Battery capacity in amp hours (12 X 250AH)
+BATT_MAX_CHARGE_CURRENT = 80 #Max charge current in amps
+
+BATT_POWER_TOTAL = BATT_VOLTS * BATT_AH
+
+#Global variables
 timebase = 1672772504.9141579 #from replay file
+Batt_Power_Last = 0
+Batt_Power_Running_Avg = 0
+Batt_Power_Remaining = 0
+
 
 app = FastAPI()
 
@@ -123,7 +135,7 @@ def GenAllFlows(Invert_status_num, BatteryPower, SolarPower, ShorePower, GenPowe
 
 @app.get("/data")
 async def data() -> DataResponse:
-    global timesbase, LastTime
+    global timesbase, LastTime, Batt_Power_Last, Batt_Power_Running_Avg, BATT_AH, Batt_Power_Remaining
 
    
     #Power Calculations
@@ -157,10 +169,59 @@ async def data() -> DataResponse:
 
     InvertorMaxPower = max(Total_Invertor_AC_power, Total_Invert_DC_power)
 
-    try:
-        BatteryPower = (mqttclient.AliasData["_var18Batt_voltage"] * mqttclient.AliasData["_var19Batt_current"])                                #Battery power"
-    except:
-        BatteryPower = 0.0
+    #Assumptions: 
+    #   BatteryPower is negative when charging
+    #   Loop is activated once per second
+    #   2 x 125 Amp-Hr batteries in system (250 Amp-Hr total)
+    #   12V battery system => 12V * 250 Amp-Hr = 3000 Watt-Hr battery capacity
+    Batt_Charge = int(mqttclient.AliasData["_var20Batt_charge"])                                    #Battery % charged"
+    Batt_Current = mqttclient.AliasData["_var19Batt_current"]                                       #Battery current
+    Batt_Voltage = float(mqttclient.AliasData["_var18Batt_voltage"])                                #Battery voltage"  TODO which DC voltage to use???
+    Batt_Voltage = DC_volts                                                                         #Battery voltage"  TODO which DC voltage to use???                   
+    Batt_Power = Batt_Voltage * Batt_Current
+                             
+    if Batt_Voltage > 14.8:
+        Batt_status_str = 'Over-Voltage Fault'
+    elif Batt_Voltage > 14.4:
+        Batt_status_str = 'Absorption Charging'
+    elif Batt_Voltage > 13.8:
+        Batt_status_str = 'Bulk Charging'
+    elif Batt_Voltage > 13.6:
+        Batt_status_str = 'Float Charging'
+    else:
+        Batt_status_str = 'Discharging'
+
+    # Calc running average of battery power all in Watt-hours and remaining batter life
+    if Batt_Charge > 99:
+        Batt_Power_Remaining = BATT_POWER_TOTAL
+    else:
+        Batt_Power_Remaining = Batt_Power_Remaining - Batt_Power / 3600
+    if Batt_Power > 0:
+        #discharging
+        Batt_Power_Running_Avg = (Batt_Power_Running_Avg * 9 + (Batt_Power / 3600)) / 10            #Watt-hours discharging  
+        Batt_Hours_Remaining_str = 'Est hours remaining: ' + str('%.1f' % (Batt_Power_Remaining  / Batt_Power_Running_Avg))
+    else:
+        #charging
+        Batt_Power_Running_Avg = 0          
+        Batt_Hours_Remaining_str = 'Est charging hours:  ' + str('%.1f' % (1.555))        #TODO:  This is not correct.  Need to calc time to 100% based on current charging rate
+    
+    
+    print('Batt_Power_Running_Avg: ', Batt_Power_Running_Avg, ' Batt_Power_Remaining:', Batt_Power_Remaining, ' Batt_Hours_Remaining: ' + Batt_Hours_Remaining_str)
+
+
+    #TODO heursitic to determine if the battery is charging;  Delete this section when real data is available
+    if int(time.time()) % 10 == 0:
+        Batt_Charge = 100
+    Batt_Power = Batt_Power_Last
+    if int(time.time()) % 5 == 0:
+        if DC_volts < 13.6:
+            #Discharging
+            Batt_Power = random.randint(1, 1000)
+        else:
+            #Charging
+            Batt_Power = random.randint(-1000, -1)
+        Batt_Power_Last = Batt_Power
+    ### end of hueristic
 
     try:
         ATS_Power = mqttclient.AliasData["_var23ATS_AC_voltage"] * mqttclient.AliasData["_var22ATS_AC_current"] 
@@ -182,7 +243,7 @@ async def data() -> DataResponse:
         SolarPower = 0
 
     #Note: Alternator power not measured so using estimate  
-    if BatteryPower < 0 and Invert_status_num == 1:                  # DC Pass and Battery charging if negative power
+    if Batt_Power < 0 and Invert_status_num == 1:                  # DC Pass and Battery charging if negative power
         #Assume that the battery is charging from the Alternator and DC_Load is unchanged
         #AC_Load = mqttclient.AliasData["_var24RV_Loads_AC"]
         try:
@@ -191,7 +252,7 @@ async def data() -> DataResponse:
                 DC_Load = 54
         except:
             DC_Load = 54
-        AlternatorPower = -BatteryPower + DC_Load + InvertorMaxPower - SolarPower
+        AlternatorPower = -Batt_Power + DC_Load + InvertorMaxPower - SolarPower
     else:
         AlternatorPower = 0
 
@@ -200,10 +261,10 @@ async def data() -> DataResponse:
     if Invert_status_num == 1:          #DC Passthrough
         #Only power source on AC side is the inverter; therefor, AC_Load = inverter power
         AC_Load = Invert_AC_power
-        DC_Load = BatteryPower + SolarPower + AlternatorPower - InvertorMaxPower
+        DC_Load = Batt_Power + SolarPower + AlternatorPower - InvertorMaxPower
     elif Invert_status_num == 2:        #AC Passthrough
         AC_Load = ATS_Power - Invert_AC_power
-        DC_Load = InvertorMaxPower + BatteryPower + SolarPower + AlternatorPower
+        DC_Load = InvertorMaxPower + Batt_Power + SolarPower + AlternatorPower
     else:
         #Shouldn't get here
         AC_Load = -1     
@@ -214,11 +275,10 @@ async def data() -> DataResponse:
 
     
 
-    HoursRemaining = 11.5
-    Batt_Charge = int(mqttclient.AliasData["_var20Batt_charge"])                                   #Battery charge"
+   
 
     (BatteryFlow, InvertPwrFlow, ShorePwrFlow, GeneratorPwrFlow, SolarPwrFlow, AltPwrFlow, Invert_status_str) = \
-        GenAllFlows(Invert_status_num, BatteryPower, SolarPower, Shore_power, GenPower, AlternatorPower)
+        GenAllFlows(Invert_status_num, Batt_Power, SolarPower, Shore_power, GenPower, AlternatorPower)
 
     #House Keeping Messages
     RedLamp = mqttclient.AliasData["_var07Red"]
@@ -246,11 +306,11 @@ async def data() -> DataResponse:
         var13=RedMsg, 
         var14=AltPwrFlow,                                               #Alternator power Flow
         #battery variables begin
-        var15=str(HoursRemaining) + ' Est hours reamining',
-        var16= str('?? Battery Status'),
+        var15= Batt_Hours_Remaining_str,
+        var16= 'Battery Status: ' + Batt_status_str,
         var17= GeneratorPwrFlow,
         var18= BatteryFlow,                        #Battery power Flow
-        var19= str('%.0f' % (BatteryPower)) + " Watts",
+        var19= str('%.0f' % Batt_Power) + " Watts",
         #battery variables end 
         var20=Time_Str,
         battery_percent= Batt_Charge,
