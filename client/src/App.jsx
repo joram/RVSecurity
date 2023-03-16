@@ -24,6 +24,7 @@ function App() {
       });
   }
 
+
   useEffect(() => {
     const interval = setInterval(() => {
       getData();
@@ -60,14 +61,20 @@ function App() {
         var20={data.var20}
 
       >
-        <div className="battery">
-          <BatteryGauge
-            value={data.battery_percent}
-            size={150}
-            padding={5}
-            aspectRatio={0.52}
-          />
-        </div>
+      <div className="battery">
+        <BatteryGauge
+          value={data.battery_percent}
+          size={150}
+          padding={5}
+          aspectRatio={0.52}
+        />
+      </div>
+
+      <div className="button">
+      <button type="button">Click Me</button>
+      </div>
+
+      <div class="h_line"></div>
 
       </SVGDiagram>
     </div>

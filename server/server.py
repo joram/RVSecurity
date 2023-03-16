@@ -16,9 +16,8 @@ import random
 #Global constants
 BATT_VOLTS  = 12.0  #Battery voltage
 BATT_AH     = 3000  #Battery capacity in amp hours (12 X 250AH)
-BATT_MAX_CHARGE_CURRENT = 80 #Max charge current in amps
 
-BATT_POWER_TOTAL = BATT_VOLTS * BATT_AH
+BATT_POWER_MAX = BATT_VOLTS * BATT_AH
 
 #Global variables
 timebase = 1672772504.9141579 #from replay file
@@ -193,7 +192,7 @@ async def data() -> DataResponse:
 
     # Calc running average of battery power all in Watt-hours and remaining batter life
     if Batt_Charge > 99:
-        Batt_Power_Remaining = BATT_POWER_TOTAL
+        Batt_Power_Remaining = BATT_POWER_MAX       #might want a timebased derating factor here
     else:
         Batt_Power_Remaining = Batt_Power_Remaining - Batt_Power / 3600
     if Batt_Power > 0:
@@ -202,11 +201,13 @@ async def data() -> DataResponse:
         Batt_Hours_Remaining_str = 'Est hours remaining: ' + str('%.1f' % (Batt_Power_Remaining  / Batt_Power_Running_Avg))
     else:
         #charging
-        Batt_Power_Running_Avg = 0          
-        Batt_Hours_Remaining_str = 'Est charging hours:  ' + str('%.1f' % (1.555))        #TODO:  This is not correct.  Need to calc time to 100% based on current charging rate
+        Batt_Power_Running_Avg = 0
+        #use charging power to calculate time to 100% charge (assuming 100% charge is BATT_POWER_MAX Watt-hours)
+        Batt_Hrs_to_Full = (BATT_POWER_MAX * (100 - Batt_Charge)/100) / abs(Batt_Power/3600)          
+        Batt_Hours_Remaining_str = 'Est hours to 100%:   ' + str('%.1f' % Batt_Hrs_to_Full)        
     
     
-    print('Batt_Power_Running_Avg: ', Batt_Power_Running_Avg, ' Batt_Power_Remaining:', Batt_Power_Remaining, ' Batt_Hours_Remaining: ' + Batt_Hours_Remaining_str)
+    #print('Batt_Power_Running_Avg: ', Batt_Power_Running_Avg, ' Batt_Power_Remaining:', Batt_Power_Remaining, ' Batt_Hours_Remaining: ' + Batt_Hours_Remaining_str)
 
 
     #TODO heursitic to determine if the battery is charging;  Delete this section when real data is available
