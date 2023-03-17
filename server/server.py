@@ -227,14 +227,7 @@ def InvertCalcs():
 
     return(InvertorMaxPower, DC_volts, Invert_AC_voltage, Invert_AC_power, Invert_status_num)
 
-@app.get("/data")
-async def data() -> DataResponse:
-    global timesbase, LastTime
-
-   
-    
-    (InvertorMaxPower, DC_volts, Invert_AC_voltage, Invert_AC_power, Invert_status_num) = InvertCalcs()
-    
+def ATS_Calcs():
     try:
         ATS_Power = mqttclient.AliasData["_var23ATS_AC_voltage"] * mqttclient.AliasData["_var22ATS_AC_current"] 
         ATS_Line = mqttclient.AliasData["_var21ATS_Line"]
@@ -243,19 +236,23 @@ async def data() -> DataResponse:
         ATS_Line = 0
 
     if ATS_Line == 1:
-        Shore_power = ATS_Power
+        ShorePower = ATS_Power
         GenPower = 0
     else:
-        Shore_power = 0
-        GenPower = ATS_Power                                     #Shore power"
+        ShorePower = 0
+        GenPower = ATS_Power  
 
+    return(ShorePower, GenPower)  
+
+def SolcarCalcs():
     try:
         SolarPower = (mqttclient.AliasData["_var26Solar_voltage"] * mqttclient.AliasData["_var27Solar_current"])                                #Battery power"
     except:
         SolarPower = 0
 
-    (Batt_Power, Batt_Voltage, Batt_Charge, Batt_Hours_Remaining_str, Batt_status_str) = BatteryCalcs(DC_volts)
+    return(SolarPower)
 
+def AlternatorCalcs(Batt_Power, Invert_status_num, InvertorMaxPower, SolarPower):
     #Note: Alternator power not measured so using estimate  
     if Batt_Power < 0 and Invert_status_num == 1:                  # DC Pass and Battery charging if negative power
         #Assume that the battery is charging fr(Batt_Power, Batt_Voltage, Batt_Hours_Remaining_str, Batt_Hrs_to_Full )om the Alternator and DC_Load is unchanged
@@ -270,6 +267,19 @@ async def data() -> DataResponse:
     else:
         AlternatorPower = 0
 
+    return(AlternatorPower)
+
+@app.get("/data")
+async def data() -> DataResponse:
+
+    (InvertorMaxPower, DC_volts, Invert_AC_voltage, Invert_AC_power, Invert_status_num) = InvertCalcs()
+    (Shore_power, GenPower)= ATS_Calcs()
+    (SolarPower) = SolcarCalcs()
+    (Batt_Power, Batt_Voltage, Batt_Charge, Batt_Hours_Remaining_str, Batt_status_str) = BatteryCalcs(DC_volts)
+    (AlternatorPower) = AlternatorCalcs(Batt_Power, Invert_status_num, InvertorMaxPower, SolarPower)
+
+    (BatteryFlow, InvertPwrFlow, ShorePwrFlow, GeneratorPwrFlow, SolarPwrFlow, AltPwrFlow, Invert_status_str) = \
+        GenAllFlows(Invert_status_num, Batt_Power, SolarPower, Shore_power, GenPower, AlternatorPower)
 
     #Calc AC and DC Loads since not measured
     if Invert_status_num == 1:          #DC Passthrough
@@ -277,7 +287,7 @@ async def data() -> DataResponse:
         AC_Load = Invert_AC_power
         DC_Load = Batt_Power + SolarPower + AlternatorPower - InvertorMaxPower
     elif Invert_status_num == 2:        #AC Passthrough
-        AC_Load = ATS_Power - Invert_AC_power
+        AC_Load = Shore_power + GenPower - Invert_AC_power
         DC_Load = InvertorMaxPower + Batt_Power + SolarPower + AlternatorPower
     else:
         #Shouldn't get here
@@ -285,10 +295,6 @@ async def data() -> DataResponse:
         DC_Load = -1
 
     #publish AC_Load and DC Load TODO
-   
-
-    (BatteryFlow, InvertPwrFlow, ShorePwrFlow, GeneratorPwrFlow, SolarPwrFlow, AltPwrFlow, Invert_status_str) = \
-        GenAllFlows(Invert_status_num, Batt_Power, SolarPower, Shore_power, GenPower, AlternatorPower)
 
     #House Keeping Messages
     RedLamp = mqttclient.AliasData["_var07Red"]
@@ -321,9 +327,10 @@ async def data() -> DataResponse:
         var17= GeneratorPwrFlow,
         var18= BatteryFlow,                        #Battery power Flow
         var19= str('%.0f' % Batt_Power) + " Watts",
+        battery_percent= Batt_Charge,
         #battery variables end 
         var20=Time_Str,
-        battery_percent= Batt_Charge,
+        
     )
 
 @app.get("/status")
