@@ -193,12 +193,8 @@ def BatteryCalcs(DC_volts):
 
     return(Batt_Power, Batt_Voltage, Batt_Charge, Batt_Hours_Remaining_str, Batt_status_str)
 
-@app.get("/data")
-async def data() -> DataResponse:
-    global timesbase, LastTime
-
-   
-    #Power Calculations
+def InvertCalcs():
+    #Inverter Power Calculations
     Invert_status_num = mqttclient.AliasData["_var16Invert_status_num"]                                   #DC Invertor numerical state"
     """note: Invert_status_num meaning = 
         0 - Disabled
@@ -229,6 +225,15 @@ async def data() -> DataResponse:
 
     InvertorMaxPower = max(Total_Invertor_AC_power, Total_Invert_DC_power)
 
+    return(InvertorMaxPower, DC_volts, Invert_AC_voltage, Invert_AC_power, Invert_status_num)
+
+@app.get("/data")
+async def data() -> DataResponse:
+    global timesbase, LastTime
+
+   
+    
+    (InvertorMaxPower, DC_volts, Invert_AC_voltage, Invert_AC_power, Invert_status_num) = InvertCalcs()
     
     try:
         ATS_Power = mqttclient.AliasData["_var23ATS_AC_voltage"] * mqttclient.AliasData["_var22ATS_AC_current"] 
@@ -280,10 +285,6 @@ async def data() -> DataResponse:
         DC_Load = -1
 
     #publish AC_Load and DC Load TODO
-
-
-    
-
    
 
     (BatteryFlow, InvertPwrFlow, ShorePwrFlow, GeneratorPwrFlow, SolarPwrFlow, AltPwrFlow, Invert_status_str) = \
@@ -306,7 +307,7 @@ async def data() -> DataResponse:
         var4 =str('%.0f' % AC_Load) + ' Watts',  
         var5 =str(SolarPower) + ' Watts',
         var6 =SolarPwrFlow,                                             #solar power Flow
-        var7 =str('%.1f' % DC_volts2) + " Volts DC",
+        var7 =str('%.1f' % DC_volts) + " Volts DC",
         var8 =str('%.0f' % DC_Load) + ' Watts',
         var9 = str(AlternatorPower) + " Watts",                                #Alternator power
         var10=InvertPwrFlow,                                            #flow annimation   
