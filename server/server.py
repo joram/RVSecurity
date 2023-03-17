@@ -132,41 +132,8 @@ def GenAllFlows(Invert_status_num, BatteryPower, SolarPower, ShorePower, GenPowe
 
     return(BatteryFlow, InvertPwrFlow, ShorePwrFlow, GeneratorPwrFlow, SolarPwrFlow, AltPwrFlow, Invert_status_str)
 
-@app.get("/data")
-async def data() -> DataResponse:
-    global timesbase, LastTime, Batt_Power_Last, Batt_Power_Running_Avg, BATT_AH, Batt_Power_Remaining
-
-   
-    #Power Calculations
-    Invert_status_num = mqttclient.AliasData["_var16Invert_status_num"]                                   #DC Invertor numerical state"
-    """note: Invert_status_num meaning = 
-        0 - Disabled
-        1 - Invert
-        2 - AC passthru
-        3 - APS Only
-        4 - Load sense (Unit is waiting for a load.)
-        5 - Waiting to Invert
-        6. Generator support
-    """
-    #AC Inverter
-    Charger_AC_current=float(mqttclient.AliasData["_var02Charger_AC_current"])                                #AC charger RMS current" 
-    Invert_AC_voltage=float(mqttclient.AliasData["_var10Invert_AC_voltage"])                             #AC invertor RMS voltage" 
-    Charger_AC_power = Invert_AC_voltage * Charger_AC_current                                                     #AC charger power   
-    Invert_AC_current=float(mqttclient.AliasData["_var09Invert_AC_current"])                                #AC invertor RMS current"
-    Invert_AC_power=Invert_AC_voltage *Invert_AC_current                                                      #AC invertor power
-    Total_Invertor_AC_power = Charger_AC_power + Invert_AC_power
-    #DC Invertor
-    DC_Charger_current=(mqttclient.AliasData["_var04Charger_current"])                                   #DC charger  current"  
-    DC_volts=float(mqttclient.AliasData["_var05Charger_voltage"])                                #DC charger  voltage" 
-    DC_volts2 = float(mqttclient.AliasData["_var14Invert_DC_Volt"])
-    if DC_volts != DC_volts2:
-        print('DC voltages do not match', DC_volts, DC_volts2)
-    DC_Charger_power = DC_volts * DC_Charger_current                                                     #DC charger power
-    Invert_DC_Amp=float(mqttclient.AliasData["_var13Invert_DC_Amp"])                               #DC Invertor current"
-    Invert_DC_power = DC_volts * Invert_DC_Amp                                                   #DC Invertor power
-    Total_Invert_DC_power = DC_Charger_power + Invert_DC_power
-
-    InvertorMaxPower = max(Total_Invertor_AC_power, Total_Invert_DC_power)
+def BatteryCalcs(DC_volts):
+    global Batt_Power_Last, Batt_Power_Running_Avg, Batt_Power_Remaining, BATT_POWER_MAX
 
     #Assumptions: 
     #   BatteryPower is negative when charging
@@ -224,6 +191,45 @@ async def data() -> DataResponse:
         Batt_Power_Last = Batt_Power
     ### end of hueristic
 
+    return(Batt_Power, Batt_Voltage, Batt_Charge, Batt_Hours_Remaining_str, Batt_status_str)
+
+@app.get("/data")
+async def data() -> DataResponse:
+    global timesbase, LastTime
+
+   
+    #Power Calculations
+    Invert_status_num = mqttclient.AliasData["_var16Invert_status_num"]                                   #DC Invertor numerical state"
+    """note: Invert_status_num meaning = 
+        0 - Disabled
+        1 - Invert
+        2 - AC passthru
+        3 - APS Only
+        4 - Load sense (Unit is waiting for a load.)
+        5 - Waiting to Invert
+        6. Generator support
+    """
+    #AC Inverter
+    Charger_AC_current=float(mqttclient.AliasData["_var02Charger_AC_current"])                                #AC charger RMS current" 
+    Invert_AC_voltage=float(mqttclient.AliasData["_var10Invert_AC_voltage"])                             #AC invertor RMS voltage" 
+    Charger_AC_power = Invert_AC_voltage * Charger_AC_current                                                     #AC charger power   
+    Invert_AC_current=float(mqttclient.AliasData["_var09Invert_AC_current"])                                #AC invertor RMS current"
+    Invert_AC_power=Invert_AC_voltage *Invert_AC_current                                                      #AC invertor power
+    Total_Invertor_AC_power = Charger_AC_power + Invert_AC_power
+    #DC Invertor
+    DC_Charger_current=(mqttclient.AliasData["_var04Charger_current"])                                   #DC charger  current"  
+    DC_volts=float(mqttclient.AliasData["_var05Charger_voltage"])                                #DC charger  voltage" 
+    DC_volts2 = float(mqttclient.AliasData["_var14Invert_DC_Volt"])
+    if DC_volts != DC_volts2:
+        print('DC voltages do not match', DC_volts, DC_volts2)
+    DC_Charger_power = DC_volts * DC_Charger_current                                                     #DC charger power
+    Invert_DC_Amp=float(mqttclient.AliasData["_var13Invert_DC_Amp"])                               #DC Invertor current"
+    Invert_DC_power = DC_volts * Invert_DC_Amp                                                   #DC Invertor power
+    Total_Invert_DC_power = DC_Charger_power + Invert_DC_power
+
+    InvertorMaxPower = max(Total_Invertor_AC_power, Total_Invert_DC_power)
+
+    
     try:
         ATS_Power = mqttclient.AliasData["_var23ATS_AC_voltage"] * mqttclient.AliasData["_var22ATS_AC_current"] 
         ATS_Line = mqttclient.AliasData["_var21ATS_Line"]
@@ -243,9 +249,11 @@ async def data() -> DataResponse:
     except:
         SolarPower = 0
 
+    (Batt_Power, Batt_Voltage, Batt_Charge, Batt_Hours_Remaining_str, Batt_status_str) = BatteryCalcs(DC_volts)
+
     #Note: Alternator power not measured so using estimate  
     if Batt_Power < 0 and Invert_status_num == 1:                  # DC Pass and Battery charging if negative power
-        #Assume that the battery is charging from the Alternator and DC_Load is unchanged
+        #Assume that the battery is charging fr(Batt_Power, Batt_Voltage, Batt_Hours_Remaining_str, Batt_Hrs_to_Full )om the Alternator and DC_Load is unchanged
         #AC_Load = mqttclient.AliasData["_var24RV_Loads_AC"]
         try:
             DC_Load = mqttclient.AliasData["_var25RV_Loads_DC"]
