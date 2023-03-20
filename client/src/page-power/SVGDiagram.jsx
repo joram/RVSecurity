@@ -1,5 +1,5 @@
 import React from "react";
-import './App.css';
+import './Power.css';
 import SVG from 'react-inlinesvg';
 
 

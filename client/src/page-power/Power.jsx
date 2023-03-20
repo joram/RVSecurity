@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
-import './App.css';
+import './Power.css';
 import Sophie from "./Sophie1.svg";
 import SVGDiagram from "./SVGDiagram";
 import BatteryGauge from "react-battery-gauge";
 
 
-function App() {
+function Power() {
   let [data, setData] = useState({});
   const getData = () => {
     fetch('http://192.168.2.177:8000/data'
@@ -35,7 +35,7 @@ function App() {
 
   return (
 
-    <div dsclassName="App">
+    <div dsclassName="Power">
 
       <SVGDiagram
         filename={Sophie}
@@ -81,4 +81,4 @@ function App() {
   )
 }
 
-export default App;
+export default Power;

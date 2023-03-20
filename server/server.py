@@ -270,7 +270,7 @@ def AlternatorCalcs(Batt_Power, Invert_status_num, InvertorMaxPower, SolarPower)
     return(AlternatorPower)
 
 @app.get("/data")
-async def data() -> DataResponse:
+async def data()-> DataResponse:
 
     (InvertorMaxPower, DC_volts, Invert_AC_voltage, Invert_AC_power, Invert_status_num) = InvertCalcs()
     (Shore_power, GenPower)= ATS_Calcs()
