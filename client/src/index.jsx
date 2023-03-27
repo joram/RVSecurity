@@ -8,6 +8,7 @@ import Contact from "./pages/Contact";
 import NoPage from "./pages/NoPage";
 import Power from "./page-power/Power";
 import reportWebVitals from './reportWebVitals';
+import 'semantic-ui-css/semantic.min.css';
 
 export default function App() {
   return (
