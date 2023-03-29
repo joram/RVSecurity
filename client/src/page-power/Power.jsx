@@ -70,12 +70,6 @@ function Power() {
         />
       </div>
 
-      <div className="button">
-      <button type="button">Click Me</button>
-      </div>
-
-      <div class="h_line"></div>
-
       </SVGDiagram>
     </div>
   )

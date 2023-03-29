@@ -4,8 +4,9 @@ import time
 import uvicorn
 #import alarm
 import mqttclient
+from typing import Annotated
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Body
 from pydantic import BaseModel
 from starlette.responses import RedirectResponse
 from starlette.staticfiles import StaticFiles
@@ -41,6 +42,32 @@ app.add_middleware(
 async def index():
     return RedirectResponse(url="/index.html")
 
+
+class AlarmPostData(BaseModel):
+    alarm: str
+    state: bool
+
+bike_alarm_state = False
+interior_alarm_state = False
+
+@app.post("/api/alarm")
+async def alarm(data: Annotated[AlarmPostData, Body()]) -> dict:
+    global bike_alarm_state
+    global interior_alarm_state
+    print(f"Alarm: {data.alarm} State: {data.state}")
+    if data.alarm == "bike":
+        bike_alarm_state = data.state
+    elif data.alarm == "interior":
+        interior_alarm_state = data.state
+
+    #alarm.set_alarm(data.alarm, data.state)
+    return {"status": "ok"}
+
+@app.get("/api/alarms")
+async def alarms() -> dict:
+    global bike_alarm_state
+    global interior_alarm_state
+    return {"bike": bike_alarm_state, "interior": interior_alarm_state}
 
 class DataResponse(BaseModel):
     var1: str
