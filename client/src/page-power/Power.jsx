@@ -8,8 +8,9 @@ import BatteryGauge from "react-battery-gauge";
 function Power() {
   let [data, setData] = useState({});
   const getData = () => {
-    fetch('http://192.168.2.177:8000/data'
+    fetch('http://192.168.2.177:8000/data/power'
       , {
+        method: "GET",
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'

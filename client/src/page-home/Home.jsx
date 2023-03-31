@@ -1,9 +1,10 @@
 import React from 'react';
 import HomePage from './HomePage.svg';
+import SVGDiagram from "../page-power/SVGDiagram";
 
 const Home = () => {
   return (
-    <div className="App">
+    <div className="AppHome">
       <img src={HomePage} alt="Home Page" />
     </div>
   );
