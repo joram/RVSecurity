@@ -3,12 +3,16 @@ import './Power.css';
 import Sophie from "./Sophie1.svg";
 import SVGDiagram from "./SVGDiagram";
 import BatteryGauge from "react-battery-gauge";
+import {IPADDR, PORT} from '../constants';
 
+
+console.log(IPADDR, PORT)
 
 function Power() {
   let [data, setData] = useState({});
   const getData = () => {
-    fetch('http://192.168.2.177:8000/data/power'
+    let url = 'http://'.concat(IPADDR,':',PORT,'/data/power')
+    fetch(url
       , {
         method: "GET",
         headers: {

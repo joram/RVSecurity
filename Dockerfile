@@ -15,5 +15,6 @@ COPY server/dgn_variables.json server/.
 
 WORKDIR /app/rvsecurity/server
 
+ENV UVICORN_PORT=80
 #RUN python3 -m pip install --use-pep517 .[dev]
 CMD python3 server.py

@@ -1,8 +1,9 @@
 import React, { useEffect } from 'react';
-import { Outlet, Link, json } from "react-router-dom";
-import './layout.css';
+import { Outlet, Link } from "react-router-dom";
 import {Button, Menu} from "semantic-ui-react";
 import { useState } from 'react';
+import {IPADDR, PORT} from '../constants';
+
 
 function TogglableButton(props) {
   let { text, activeColor, state, onClick } = props;
@@ -30,7 +31,8 @@ function TogglableButton(props) {
 }
 function tellServerAlarmStateChanged(state, alarmName){
   console.log("Alarm state changed: " + state + " " + alarmName)
-  fetch('http://localhost:8000/api/alarm', {
+  let url = 'http://'.concat(IPADDR,':',PORT,'/api/alarms')
+  fetch(url, {
     method: "POST",
     headers: {
       'Content-Type': 'application/json',
@@ -59,7 +61,8 @@ function Layout() {
   let [interiorAlarmState, setInteriorAlarmState] = useState(false);
 
   function getAlarmStatesFromServer(){
-    fetch('http://localhost:8000/api/alarms', {
+    let url = 'http://'.concat(IPADDR,':',PORT,'/api/alarms')
+    fetch(url, {
       method: "GET",
       headers: {
         'Content-Type': 'application/json',
@@ -68,7 +71,7 @@ function Layout() {
     })
     .then(response => response.json())
     .then(data => {
-      console.log(data);
+      // console.log(data);
       setBikeAlarmState(data.bike);
       setInteriorAlarmState(data.interior);
     })

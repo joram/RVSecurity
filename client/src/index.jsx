@@ -8,20 +8,26 @@ import NoPage from "./pages/NoPage";
 import Power from "./page-power/Power";
 import reportWebVitals from './reportWebVitals';
 import 'semantic-ui-css/semantic.min.css';
+import './index.css';
+import {IPADDR, PORT} from './constants';
+
+
+console.log(IPADDR, PORT)
 
 export default function App() {
   return (
     <div className="body">
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
-          <Route path="contact" element={<Contact />} />
-          <Route path="power" element={<Power />}/>
-          <Route path="*" element={<NoPage />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Home />} />
+            <Route path="/index.html" element={<Home />} />
+            <Route path="contact" element={<Contact />} />
+            <Route path="power" element={<Power />}/>
+            <Route path="*" element={<NoPage />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
     </div>
   );
 }

@@ -12,13 +12,22 @@ from starlette.responses import RedirectResponse
 from starlette.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import random
+import json
+
 #import math
 
+try:
+    fp = open("../constants.json", "r")
+    constants = json.load(fp)
+except:
+    print(" ")
+    exit("constants.json file not found or mal formed")
 #Global constants
-BATT_VOLTS  = 12.0  #Battery voltage
-BATT_AH     = 3000  #Battery capacity in amp hours (12 X 250AH)
 
-BATT_POWER_MAX = BATT_VOLTS * BATT_AH
+#BATT_VOLTS-- Battery voltage
+#BATT_AH --   Total Battery capacity in amp hours 
+
+BATT_POWER_MAX = float(constants["BATT_VOLTS"]) * float(constants["BATT_AH"])
 
 #Global variables
 timebase = 1672772504.9141579 #from replay file
@@ -296,6 +305,8 @@ def AlternatorCalcs(Batt_Power, Invert_status_num, InvertorMaxPower, SolarPower)
 
     return(AlternatorPower)
 
+
+
 @app.get("/data/power")
 async def data()-> DataResponse:
 
@@ -360,12 +371,41 @@ async def data()-> DataResponse:
         
     )
 
+@app.get("/data/home")
+async def data()-> DataResponse:
+
+ return DataResponse(
+        var1 = 'var1' + ' Watts', 
+        var2 = 'var2',
+        var3 =str('%.1f' % random.randint(10,13)) + " Volts AC",
+        var4 = 'var4',
+        var5 = 'var5',
+        var6 = 'var6',
+        var7 = 'var7',
+        var8 = 'var8',
+        var9 = 'var9',                                #Alternator power
+        var10= 'var10',                                            #flow annimation
+        var11= 'var11',
+        var12= 'var12',
+        var13= 'var13',
+        var14= 'var14',
+        var15= 'var15',
+        var16= 'var16',
+        var17= 'var17',
+        var18= 'var18',
+        var19= 'var19',
+        battery_percent= '50',
+        var20= 'var20',
+        
+    )
+
 @app.get("/status")
 async def status() -> dict:
     return {"hello": "world and more"}
 
 
 app.mount("/", StaticFiles(directory="build"), name="ui")
+
 
 
 if __name__ == "__main__":
@@ -376,8 +416,12 @@ if __name__ == "__main__":
     t1.start()
 
     # "0.0.0.0" => accept requests from any IP addr
-    #uvicorn.run("app", host="0.0.0.0", port=80, reload=True)
+    # default port is 8000.  Dockerfile sets port = 80 using environment variable
 
     
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+   
+    print(constants["ipaddr"], constants["port"])
+    
+
+    uvicorn.run(app, host="0.0.0.0", port=constants["port"])
     
