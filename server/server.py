@@ -13,7 +13,6 @@ from starlette.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import random
 import json
-
 #import math
 
 try:
