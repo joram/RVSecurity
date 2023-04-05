@@ -31,7 +31,7 @@ function TogglableButton(props) {
 }
 function tellServerAlarmStateChanged(state, alarmName){
   console.log("Alarm state changed: " + state + " " + alarmName)
-  let url = 'http://'.concat(IPADDR,':',PORT,'/api/alarms')
+  let url = 'http://'.concat(IPADDR,':',PORT,'/api/alarm')
   fetch(url, {
     method: "POST",
     headers: {
