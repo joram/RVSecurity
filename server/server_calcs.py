@@ -228,3 +228,36 @@ def AlternatorCalcs(Batt_Power, Invert_status_num, InvertorMaxPower, SolarPower)
 
     return(AlternatorPower)
 
+def LoadCalcs(Invert_status_num, InvertorMaxPower, ShorePower, GenPower, Invert_AC_power, Batt_Power, SolarPower, AlternatorPower):
+#Calc AC and DC Loads since not measured
+    if Invert_status_num == 1:          #DC Passthrough
+        #Only power source on AC side is the inverter; therefor, AC_Load = inverter power
+        AC_Load = Invert_AC_power
+        DC_Load = Batt_Power + SolarPower + AlternatorPower - InvertorMaxPower
+    elif Invert_status_num == 2:        #AC Passthrough
+        AC_Load = ShorePower + GenPower - Invert_AC_power
+        DC_Load = InvertorMaxPower + Batt_Power + SolarPower + AlternatorPower
+    else:
+        #Shouldn't get here
+        AC_Load = -1     
+        DC_Load = -1
+    
+    #publish AC_Load and DC Load to mqtt TODO   
+    #  
+    return(AC_Load, DC_Load)
+
+
+
+def HouseKeeping():
+    #House Keeping Messages
+    RedLamp = mqttclient.AliasData["_var07Red"]
+    if RedLamp == '00':
+        RedMsg = ''
+    else:
+        RedMsg = RedLamp + ' Red Lamp Fault'
+    YellowLamp =str(mqttclient.AliasData["_var08Yellow"]) + " Yellow Lamp" 
+    YellowMsg = ''
+    #TODO replace time with wall clock time
+    Time_Str =str('%.1f' % ((float(mqttclient.AliasData["_var01Timestamp"])-timebase)/60)) + " Time"
+    return(RedMsg, YellowMsg, Time_Str)
+

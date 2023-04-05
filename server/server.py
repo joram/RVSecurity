@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import threading
-import time
 import uvicorn
 #import alarm
 import mqttclient
@@ -12,7 +11,6 @@ from starlette.responses import RedirectResponse
 from starlette.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import random
-import json
 from server_calcs import *
 
 
@@ -42,8 +40,7 @@ interior_alarm_state = False
 
 @app.post("/api/alarm")
 async def alarm(data: Annotated[AlarmPostData, Body()]) -> dict:
-    global bike_alarm_state
-    global interior_alarm_state
+    global bike_alarm_state, interior_alarm_state
     print(f"Alarm: {data.alarm} State: {data.state}")
     if data.alarm == "bike":
         bike_alarm_state = data.state
@@ -55,8 +52,7 @@ async def alarm(data: Annotated[AlarmPostData, Body()]) -> dict:
 
 @app.get("/api/alarms")
 async def alarms() -> dict:
-    global bike_alarm_state
-    global interior_alarm_state
+    global bike_alarm_state, interior_alarm_state
     return {"bike": bike_alarm_state, "interior": interior_alarm_state}
 
 class DataResponse(BaseModel):
@@ -88,41 +84,20 @@ class DataResponse(BaseModel):
 async def data()-> DataResponse:
 
     (InvertorMaxPower, DC_volts, Invert_AC_voltage, Invert_AC_power, Invert_status_num) = InvertCalcs()
-    (Shore_power, GenPower)= ATS_Calcs()
+    (ShorePower, GenPower)= ATS_Calcs()
     (SolarPower) = SolcarCalcs()
     (Batt_Power, Batt_Voltage, Batt_Charge, Batt_Hours_Remaining_str, Batt_status_str) = BatteryCalcs(DC_volts)
     (AlternatorPower) = AlternatorCalcs(Batt_Power, Invert_status_num, InvertorMaxPower, SolarPower)
 
     (BatteryFlow, InvertPwrFlow, ShorePwrFlow, GeneratorPwrFlow, SolarPwrFlow, AltPwrFlow, Invert_status_str) = \
-        GenAllFlows(Invert_status_num, Batt_Power, SolarPower, Shore_power, GenPower, AlternatorPower)
+        GenAllFlows(Invert_status_num, Batt_Power, SolarPower, ShorePower, GenPower, AlternatorPower)
 
     #Calc AC and DC Loads since not measured
-    if Invert_status_num == 1:          #DC Passthrough
-        #Only power source on AC side is the inverter; therefor, AC_Load = inverter power
-        AC_Load = Invert_AC_power
-        DC_Load = Batt_Power + SolarPower + AlternatorPower - InvertorMaxPower
-    elif Invert_status_num == 2:        #AC Passthrough
-        AC_Load = Shore_power + GenPower - Invert_AC_power
-        DC_Load = InvertorMaxPower + Batt_Power + SolarPower + AlternatorPower
-    else:
-        #Shouldn't get here
-        AC_Load = -1     
-        DC_Load = -1
-
-    #publish AC_Load and DC Load TODO
-
-    #House Keeping Messages
-    RedLamp = mqttclient.AliasData["_var07Red"]
-    if RedLamp == '00':
-        RedMsg = ''
-    else:
-        RedMsg = RedLamp + ' Red Lamp Fault'
-    YellowLamp =str(mqttclient.AliasData["_var08Yellow"]) + " Yellow Lamp" 
-    YellowMsg = ''
-    Time_Str =str('%.1f' % ((float(mqttclient.AliasData["_var01Timestamp"])-timebase)/60)) + " Time"
+    (AC_Load, DC_Load) = LoadCalcs(Invert_status_num, InvertorMaxPower, ShorePower, GenPower, Invert_AC_power, Batt_Power, SolarPower, AlternatorPower)
+    (RedMsg, YellowMsg, Time_Str) = HouseKeeping()
 
     return DataResponse(
-        var1 =str(Shore_power) + ' Watts',      #shore power (watts)
+        var1 =str(ShorePower) + ' Watts',      #shore power (watts)
         var2 =ShorePwrFlow,                                             #shorepower Flow
         var3 =str('%.0f' % Invert_AC_voltage) + " Volts AC",
         var4 =str('%.0f' % AC_Load) + ' Watts',  
