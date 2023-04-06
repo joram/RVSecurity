@@ -10,8 +10,10 @@ FROM reactbase
 WORKDIR /app/rvsecurity
 COPY server/build server/build/.
 COPY server/server.py server/.
+COPY server/server_calcs.py server/.
 COPY server/mqttclient.py server/.
 COPY server/dgn_variables.json server/.
+COPY server/constants.json server/.
 
 WORKDIR /app/rvsecurity/server
 

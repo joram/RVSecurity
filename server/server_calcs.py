@@ -5,13 +5,12 @@ import mqttclient
 
 
 try:
-    fp = open("../constants.json", "r")
+    fp = open("./constants.json", "r")
     constants = json.load(fp)
 except:
     print(" ")
     exit("constants.json file not found or mal formed")
 
-print("hello world!!!")
 #Global constants
 
 #BATT_VOLTS-- Battery voltage

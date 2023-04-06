@@ -15,6 +15,15 @@ client_start:
 # start_Client in a separate cmd window (note: server must be started first)
 	cd client; npm start
 
+constants_copy:
+# Copies constants in xx.js file in client to xx.json file in server
+# Assumes very simple JS file of just constants
+# Example format:
+#	export const IPADDR= "192.168.2.177";
+#	export const PORT= "8000";
+#	...
+	python3 constantscopy.py client/src/constants.js server/constants.json
+
 
 build:
 #this is only needed whey you're ready to deploy
