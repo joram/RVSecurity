@@ -172,8 +172,8 @@ if __name__ == "__main__":
 
     
    
-    print(constants["ipaddr"], constants["port"])
+    print(constants["IPADDR"], constants["PORT"])
     
 
-    uvicorn.run(app, host="0.0.0.0", port=constants["port"])
+    uvicorn.run(app, host="0.0.0.0", port=constants["PORT"])
     

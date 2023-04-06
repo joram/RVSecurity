@@ -5,7 +5,7 @@ import mqttclient
 
 
 try:
-    fp = open("./constants.json", "r")
+    fp = open("./constants.json", "rt")
     constants = json.load(fp)
 except:
     print(" ")
