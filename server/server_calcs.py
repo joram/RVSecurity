@@ -98,10 +98,17 @@ def BatteryCalcs(DC_volts):
     #   Loop is activated once per second
     #   2 x 125 Amp-Hr batteries in system (250 Amp-Hr total)
     #   12V battery system => 12V * 250 Amp-Hr = 3000 Watt-Hr battery capacity
-    Batt_Charge = int(mqttclient.AliasData["_var20Batt_charge"])                                    #Battery % charged"
-    Batt_Current = mqttclient.AliasData["_var19Batt_current"]                                       #Battery current
-    Batt_Voltage = float(mqttclient.AliasData["_var18Batt_voltage"])                                #Battery voltage"  TODO which DC voltage to use???
-    Batt_Voltage = DC_volts                                                                         #Battery voltage"  TODO which DC voltage to use???                   
+
+    try:
+        Batt_Charge = int(mqttclient.AliasData["_var20Batt_charge"])                                    #Battery % charged"
+        Batt_Current = mqttclient.AliasData["_var19Batt_current"]                                       #Battery current
+        Batt_Voltage = float(mqttclient.AliasData["_var18Batt_voltage"])                                #Battery voltage"  TODO which DC voltage to use???
+    except:
+        #default values
+        Batt_Voltage = DC_volts 
+        Batt_Charge = 100
+        Batt_Current = 0.1
+
     Batt_Power = Batt_Voltage * Batt_Current
                              
     if Batt_Voltage > 14.8:
@@ -256,7 +263,11 @@ def HouseKeeping():
         RedMsg = RedLamp + ' Red Lamp Fault'
     YellowLamp =str(mqttclient.AliasData["_var08Yellow"]) + " Yellow Lamp" 
     YellowMsg = ''
+    
     #TODO replace time with wall clock time
     Time_Str =str('%.1f' % ((float(mqttclient.AliasData["_var01Timestamp"])-timebase)/60)) + " Time"
     return(RedMsg, YellowMsg, Time_Str)
 
+if __name__ == "__main__":
+   
+    print("serv_calcs doesn't run standalone")

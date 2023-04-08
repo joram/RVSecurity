@@ -25,7 +25,7 @@ constants_copy:
 	python3 constantscopy.py client/src/constants.js server/constants.json
 
 
-build:
+build: constants_copy
 #this is only needed whey you're ready to deploy
 	cd client; npm run-script build
 	cd client; rm -Rf ../server/build; mv ./build ../server/

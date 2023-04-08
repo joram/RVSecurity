@@ -30,15 +30,14 @@ app.add_middleware(
 async def index():
     return RedirectResponse(url="/index.html")
 
+bike_alarm_state = False
+interior_alarm_state = False
 
 class AlarmPostData(BaseModel):
     alarm: str
     state: bool
 
-bike_alarm_state = False
-interior_alarm_state = False
-
-@app.post("/api/alarm")
+@app.post("/api/alarmpost")
 async def alarm(data: Annotated[AlarmPostData, Body()]) -> dict:
     global bike_alarm_state, interior_alarm_state
     print(f"Alarm: {data.alarm} State: {data.state}")
@@ -50,7 +49,7 @@ async def alarm(data: Annotated[AlarmPostData, Body()]) -> dict:
     #alarm.set_alarm(data.alarm, data.state)
     return {"status": "ok"}
 
-@app.get("/api/alarms")
+@app.get("/api/alarmget")
 async def alarms() -> dict:
     global bike_alarm_state, interior_alarm_state
     return {"bike": bike_alarm_state, "interior": interior_alarm_state}
@@ -79,7 +78,7 @@ class DataResponse(BaseModel):
     battery_percent: int
 
 
-
+# This is the POWER page function that is called by the front end client
 @app.get("/data/power")
 async def data()-> DataResponse:
 
@@ -123,6 +122,7 @@ async def data()-> DataResponse:
         
     )
 
+# This is the HOME page function that is called by the front end client
 @app.get("/data/home")
 async def data()-> DataResponse:
 
