@@ -109,6 +109,10 @@ def BatteryCalcs(DC_volts):
         Batt_Charge = 100
         Batt_Current = 0.1
 
+    if Batt_Current == 0:
+        #keep Batt_Power from going to zero
+        Batt_Current = 0.01
+
     Batt_Power = Batt_Voltage * Batt_Current
                              
     if Batt_Voltage > 14.8:
