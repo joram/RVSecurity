@@ -56,14 +56,14 @@ def GenAllFlows(Invert_status_num, BatteryPower, SolarPower, ShorePower, GenPowe
     else:
         BatteryFlow = RightMotion
 
-    if Invert_status_num == 1:          #DC Passthrough  xxx
-        if BatteryPower > 0:                  #Battery charging if positive power
+    if Invert_status_num == 1:              #DC powered  xxx
+        if BatteryPower > 0:                #Battery charging if positive power
             Invert_status_str = 'Alternator Powered'
         else:
             Invert_status_str = 'Battery Powered'
         InvertPwrFlow = LeftMotion
 
-    elif Invert_status_num == 2:        #AC Passthrough
+    elif Invert_status_num == 2:            #AC/Shore powered
         Invert_status_str = 'Shore Powered'
         InvertPwrFlow = RightMotion
 
