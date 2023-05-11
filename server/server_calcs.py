@@ -49,13 +49,15 @@ def GenAllFlows(Invert_status_num, BatteryPower, SolarPower, ShorePower, GenPowe
     Invert_status_str = mqttclient.AliasData["_var15Invert_status_name"]                                  #Invertor string meaning"
 
     RightMotion, LeftMotion = FlowMotion()  
-    if BatteryPower < 0:                  #Battery charging if negative power  TODO check if this is correct
+    if BatteryPower == 0:
+        BatteryFlow = ''
+    elif BatteryPower > 0:                  #Battery charging 
         BatteryFlow = LeftMotion
     else:
         BatteryFlow = RightMotion
 
-    if Invert_status_num == 1:          #DC Passthrough
-        if BatteryPower < 0:                  #Battery charging if negative power
+    if Invert_status_num == 1:          #DC Passthrough  xxx
+        if BatteryPower > 0:                  #Battery charging if positive power
             Invert_status_str = 'Alternator Powered'
         else:
             Invert_status_str = 'Battery Powered'
@@ -94,28 +96,27 @@ def BatteryCalcs(DC_volts):
     global Batt_Power_Last, Batt_Power_Running_Avg, Batt_Power_Remaining, BATT_POWER_MAX
 
     #Assumptions: 
-    #   BatteryPower is negative when charging
+    #   BatteryPower is positive when charging
     #   Loop is activated once per second
     #   2 x 125 Amp-Hr batteries in system (250 Amp-Hr total)
     #   12V battery system => 12V * 250 Amp-Hr = 3000 Watt-Hr battery capacity
 
     try:
         Batt_Charge = int(mqttclient.AliasData["_var20Batt_charge"])                                    #Battery % charged"
-        Batt_Current = mqttclient.AliasData["_var19Batt_current"]                                       #Battery current
+        Batt_Current = int(mqttclient.AliasData["_var19Batt_current"])                                  #Battery current
         Batt_Voltage = float(mqttclient.AliasData["_var18Batt_voltage"])                                #Battery voltage"  TODO which DC voltage to use???
     except:
         #default values
         Batt_Voltage = DC_volts 
         Batt_Charge = 100
-        Batt_Current = 0.1
-
-    if Batt_Current == 0:
-        #keep Batt_Power from going to zero
-        Batt_Current = 0.01
+        Batt_Current = 0
+        print("Error reading battery data - using defaults")
 
     Batt_Power = Batt_Voltage * Batt_Current
-                             
-    if Batt_Voltage > 14.8:
+
+    if Batt_Power == 0:
+        Batt_status_str = 'Floating'
+    elif Batt_Voltage > 14.8:
         Batt_status_str = 'Over-Voltage Fault'
     elif Batt_Voltage > 14.4:
         Batt_status_str = 'Absorption Charging'
@@ -128,10 +129,14 @@ def BatteryCalcs(DC_volts):
 
     # Calc running average of battery power all in Watt-hours and remaining batter life
     if Batt_Charge > 99:
-        Batt_Power_Remaining = BATT_POWER_MAX       #might want a timebased derating factor here
+        Batt_Power_Remaining = BATT_POWER_MAX       #TODO: might want a timebased derating factor here
     else:
         Batt_Power_Remaining = Batt_Power_Remaining - Batt_Power / 3600
-    if Batt_Power > 0:
+    
+    if Batt_Power == 0:
+        Batt_Power_Running_Avg = 0
+        Batt_Hours_Remaining_str = ' '
+    elif Batt_Power < 0:
         #discharging
         Batt_Power_Running_Avg = (Batt_Power_Running_Avg * 9 + (Batt_Power / 3600)) / 10            #Watt-hours discharging  
         Batt_Hours_Remaining_str = 'Est hours remaining: ' + str('%.1f' % (Batt_Power_Remaining  / Batt_Power_Running_Avg))
@@ -144,21 +149,6 @@ def BatteryCalcs(DC_volts):
     
     
     #print('Batt_Power_Running_Avg: ', Batt_Power_Running_Avg, ' Batt_Power_Remaining:', Batt_Power_Remaining, ' Batt_Hours_Remaining: ' + Batt_Hours_Remaining_str)
-
-
-    #TODO heursitic to determine if the battery is charging;  Delete this section when real data is available
-    if int(time.time()) % 10 == 0:
-        Batt_Charge = 100
-    Batt_Power = Batt_Power_Last
-    if int(time.time()) % 5 == 0:
-        if DC_volts < 13.6:
-            #Discharging
-            Batt_Power = random.randint(1, 1000)
-        else:
-            #Charging
-            Batt_Power = random.randint(-1000, -1)
-        Batt_Power_Last = Batt_Power
-    ### end of hueristic
 
     return(Batt_Power, Batt_Voltage, Batt_Charge, Batt_Hours_Remaining_str, Batt_status_str)
 
@@ -174,25 +164,30 @@ def InvertCalcs():
         5 - Waiting to Invert
         6. Generator support
     """
-    #AC Inverter
-    Charger_AC_current=float(mqttclient.AliasData["_var02Charger_AC_current"])                                #AC charger RMS current" 
+    #AC CHarger
+    Charger_AC_current =float(mqttclient.AliasData["_var02Charger_AC_current"])                                #AC charger RMS current" 
+    Charger_AC_voltage =float(mqttclient.AliasData["_var03Charger_AC_voltage"])                                #AC charger RMS current" 
+    Charger_AC_power = Charger_AC_voltage * Charger_AC_current                                                     #AC charger power 
+    #AC Inverter  
     Invert_AC_voltage=float(mqttclient.AliasData["_var10Invert_AC_voltage"])                             #AC invertor RMS voltage" 
-    Charger_AC_power = Invert_AC_voltage * Charger_AC_current                                                     #AC charger power   
     Invert_AC_current=float(mqttclient.AliasData["_var09Invert_AC_current"])                                #AC invertor RMS current"
     Invert_AC_power=Invert_AC_voltage *Invert_AC_current                                                      #AC invertor power
     Total_Invertor_AC_power = Charger_AC_power + Invert_AC_power
-    #DC Invertor
+    #DC Charger
     DC_Charger_current=(mqttclient.AliasData["_var04Charger_current"])                                   #DC charger  current"  
     DC_volts=float(mqttclient.AliasData["_var05Charger_voltage"])                                #DC charger  voltage" 
     DC_volts2 = float(mqttclient.AliasData["_var14Invert_DC_Volt"])
     if DC_volts != DC_volts2:
         print('DC voltages do not match', DC_volts, DC_volts2)
     DC_Charger_power = DC_volts * DC_Charger_current                                                     #DC charger power
+    #DC Invertor
     Invert_DC_Amp=float(mqttclient.AliasData["_var13Invert_DC_Amp"])                               #DC Invertor current"
     Invert_DC_power = DC_volts * Invert_DC_Amp                                                   #DC Invertor power
     Total_Invert_DC_power = DC_Charger_power + Invert_DC_power
 
     InvertorMaxPower = max(Total_Invertor_AC_power, Total_Invert_DC_power)
+
+    print(Invert_status_num, Charger_AC_power, Invert_AC_power, DC_Charger_power, Invert_DC_power)
 
     return(InvertorMaxPower, DC_volts, Invert_AC_voltage, Invert_AC_power, Invert_status_num)
 
@@ -223,7 +218,7 @@ def SolcarCalcs():
 
 def AlternatorCalcs(Batt_Power, Invert_status_num, InvertorMaxPower, SolarPower):
     #Note: Alternator power not measured so using estimate  
-    if Batt_Power < 0 and Invert_status_num == 1:                  # DC Pass and Battery charging if negative power
+    if Batt_Power > 0 and Invert_status_num == 2:                  # System running off of 12V (no shore power)
         #Assume that the battery is charging fr(Batt_Power, Batt_Voltage, Batt_Hours_Remaining_str, Batt_Hrs_to_Full )om the Alternator and DC_Load is unchanged
         #AC_Load = mqttclient.AliasData["_var24RV_Loads_AC"]
         try:
