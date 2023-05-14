@@ -1,6 +1,6 @@
 {
     "COMMENT": "NOTE: client/src/constants.js is source file.  DO NOT EDIT constants.json.  Run makefile to update constants.json",
-    "IPADDR": "192.168.2.177",
+    "IPADDR": "10.0.0.253",
     "PORT": "8000",
     "BATT_VOLTS": "12",
     "BATT_AH": "250"
