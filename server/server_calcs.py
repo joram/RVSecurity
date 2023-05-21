@@ -16,13 +16,13 @@ except:
 #BATT_VOLTS-- Battery voltage
 #BATT_AH --   Total Battery capacity in amp hours 
 
-BATT_POWER_MAX = float(constants["BATT_VOLTS"]) * float(constants["BATT_AH"])
+BATT_POWER_MAX = float(constants["BATT_VOLTS"]) * float(constants["BATT_AH"])   #Max battery power in watt hours
 
 #Global variables
 timebase = 1672772504.9141579 #from replay file
 Batt_Power_Last = 0
-Batt_Power_Running_Avg = 0
-Batt_Power_Remaining = 0
+Batt_Power_Running_Avg = 50
+Batt_Power_Remaining = BATT_POWER_MAX
 
 def FlowMotion():
     
@@ -113,6 +113,7 @@ def BatteryCalcs(DC_volts):
         print("Error reading battery data - using defaults")
 
     Batt_Power = Batt_Voltage * Batt_Current
+    Batt_Power_Remaining = BATT_POWER_MAX * Batt_Charge/100
 
     if Batt_Power == 0:
         Batt_status_str = 'Floating'
@@ -127,28 +128,22 @@ def BatteryCalcs(DC_volts):
     else:
         Batt_status_str = 'Discharging'
 
-    # Calc running average of battery power all in Watt-hours and remaining batter life
-    if Batt_Charge > 99:
-        Batt_Power_Remaining = BATT_POWER_MAX       #TODO: might want a timebased derating factor here
-    else:
-        Batt_Power_Remaining = Batt_Power_Remaining - Batt_Power / 3600
-    
+        
     if Batt_Power == 0:
-        Batt_Power_Running_Avg = 0
         Batt_Hours_Remaining_str = ' '
     elif Batt_Power < 0:
         #discharging
-        Batt_Power_Running_Avg = (Batt_Power_Running_Avg * 9 + (Batt_Power / 3600)) / 10            #Watt-hours discharging  
+        Batt_Power_Running_Avg = (Batt_Power_Running_Avg * 15 - Batt_Power) / 16            #Watt-hours discharging  
         Batt_Hours_Remaining_str = 'Est hours remaining: ' + str('%.1f' % (Batt_Power_Remaining  / Batt_Power_Running_Avg))
     else:
         #charging
         Batt_Power_Running_Avg = 0
         #use charging power to calculate time to 100% charge (assuming 100% charge is BATT_POWER_MAX Watt-hours)
-        Batt_Hrs_to_Full = (BATT_POWER_MAX * (100 - Batt_Charge)/100) / abs(Batt_Power/3600)          
+        Batt_Hrs_to_Full = (BATT_POWER_MAX - Batt_Power_Remaining)/ Batt_Power          
         Batt_Hours_Remaining_str = 'Est hours to 100%:   ' + str('%.1f' % Batt_Hrs_to_Full)        
     
     
-    #print('Batt_Power_Running_Avg: ', Batt_Power_Running_Avg, ' Batt_Power_Remaining:', Batt_Power_Remaining, ' Batt_Hours_Remaining: ' + Batt_Hours_Remaining_str)
+    print('Batt_Power_Running_Avg: ', Batt_Power_Running_Avg, ' Batt_Power_Remaining:', Batt_Power_Remaining, '   ' + Batt_Hours_Remaining_str)
 
     return(Batt_Power, Batt_Voltage, Batt_Charge, Batt_Hours_Remaining_str, Batt_status_str)
 

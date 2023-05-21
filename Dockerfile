@@ -1,4 +1,4 @@
-FROM python:3.10-slim-buster AS reactbase
+FROM python:3.10.11-slim-buster AS reactbase
 RUN python3 -m pip install --upgrade pip
 RUN apt-get update && apt-get install build-essential -y
 

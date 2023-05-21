@@ -7,15 +7,17 @@ from typing import Annotated
 
 from fastapi import FastAPI, Body
 from pydantic import BaseModel
-from starlette.responses import RedirectResponse
 from starlette.staticfiles import StaticFiles
+from starlette.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 import random
 from server_calcs import *
 
 
 
+
 app = FastAPI()
+index_content = open("build/index.html").read()
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,10 +27,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 @app.get("/")
+@app.get("/power")
+@app.get("/contact")
 async def index():
-    return RedirectResponse(url="/index.html")
+    return Response(index_content)
 
 bike_alarm_state = False
 interior_alarm_state = False
@@ -155,9 +158,8 @@ async def data()-> DataResponse:
 async def status() -> dict:
     return {"hello": "world and more"}
 
-
-app.mount("/", StaticFiles(directory="build"), name="ui")
-
+static_files = StaticFiles(directory="build")
+app.mount("/", static_files, name="ui")
 
 
 if __name__ == "__main__":
