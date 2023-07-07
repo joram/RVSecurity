@@ -35,8 +35,8 @@ setup(
     name="RVSecurity",
     version="1.0",
     description="A simple server for controlling an RV security system",
-    author="John Oram",
-    author_email="john@oram.ca",
+    author="Tom Blank",
+    author_email="tblank@hotmail.com",
     install_requires=packages,
     packages=find_packages(),
     extras_require={

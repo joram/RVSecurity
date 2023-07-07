@@ -85,32 +85,32 @@ class DataResponse(BaseModel):
 @app.get("/data/power")
 async def data()-> DataResponse:
 
-    (InvertorMaxPower, DC_volts, Invert_AC_voltage, Invert_AC_power, Invert_status_num) = InvertCalcs()
+    (Charger_AC_power, Charger_AC_voltage, Invert_AC_power, DC_Charger_power, DC_Charger_volts, Invert_DC_power, Invert_status_num)= InvertCalcs()
     (ShorePower, GenPower)= ATS_Calcs()
     (SolarPower) = SolcarCalcs()
-    (Batt_Power, Batt_Voltage, Batt_Charge, Batt_Hours_Remaining_str, Batt_status_str) = BatteryCalcs(DC_volts)
-    (AlternatorPower) = AlternatorCalcs(Batt_Power, Invert_status_num, InvertorMaxPower, SolarPower)
+    (Batt_Power, Batt_Voltage, Batt_Charge, Batt_Hours_Remaining_str, Batt_status_str) = BatteryCalcs()
+    (AlternatorPower) = AlternatorCalcs(Batt_Power, Invert_status_num, Invert_DC_power, SolarPower)
 
     (BatteryFlow, InvertPwrFlow, ShorePwrFlow, GeneratorPwrFlow, SolarPwrFlow, AltPwrFlow, Invert_status_str) = \
         GenAllFlows(Invert_status_num, Batt_Power, SolarPower, ShorePower, GenPower, AlternatorPower)
 
     #Calc AC and DC Loads since not measured
-    (AC_Load, DC_Load) = LoadCalcs(Invert_status_num, InvertorMaxPower, ShorePower, GenPower, Invert_AC_power, Batt_Power, SolarPower, AlternatorPower)
+    (AC_HeatPump_Load, DC_Load) = LoadCalcs(Invert_status_num, Charger_AC_power, DC_Charger_power, ShorePower, GenPower, Batt_Power, SolarPower, AlternatorPower, Invert_DC_power)
     (RedMsg, YellowMsg, Time_Str) = HouseKeeping()
 
     return DataResponse(
-        var1 =str(ShorePower) + ' Watts',      #shore power (watts)
+        var1 =str(max(ShorePower, GenPower)) + ' Watts',      #shore or gen power (watts)
         var2 =ShorePwrFlow,                                             #shorepower Flow
-        var3 =str('%.0f' % Invert_AC_voltage) + " Volts AC",
-        var4 =str('%.0f' % AC_Load) + ' Watts',  
+        var3 =str('%.0f' % Charger_AC_voltage) + " Volts AC",
+        var4 =str('%.0f' % AC_HeatPump_Load) + ' Watts',  
         var5 =str(SolarPower) + ' Watts',
         var6 =SolarPwrFlow,                                             #solar power Flow
-        var7 =str('%.1f' % DC_volts) + " Volts DC",
+        var7 =str('%.1f' % Batt_Voltage) + " Volts DC",
         var8 =str('%.0f' % DC_Load) + ' Watts',
-        var9 = str(AlternatorPower) + " Watts",                                #Alternator power
+        var9 = str('%.0f' % AlternatorPower) + " Watts",                                #Alternator power
         var10=InvertPwrFlow,                                            #flow annimation   
-        var11=Invert_status_str,
-        var12= str('%.0f' % InvertorMaxPower) + " Watts Transferring",
+        var11=str('%.0f' % Charger_AC_power) + " Watts", 
+        var12= str('%.0f' % max(Invert_AC_power, .8 * (Invert_DC_power)) + " Watts"),      #note: .8 is efficiency estimate of inverter
         var13=RedMsg, 
         var14=AltPwrFlow,                                               #Alternator power Flow
         #battery variables begin
