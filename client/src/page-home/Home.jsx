@@ -3,7 +3,8 @@ import BatteryGauge from "react-battery-gauge";
 import HomePage from './HomePage.svg';
 import SVGDiagram from "../page-power/SVGDiagram";
 import {IPADDR, PORT} from '../constants';
-
+import Gauge1 from '../components/gauge1'
+import Gauge2 from "../components/gauge2";
 
 
 
@@ -40,7 +41,6 @@ function Home() {
   return (
 
     <div dsclassName="Home">
-
       <SVGDiagram
         filename={HomePage}
         var1={data.var1}
@@ -72,6 +72,19 @@ function Home() {
           padding={5}
           aspectRatio={0.52}
         />
+      </div>
+      <div id="first_gauge">
+          <Gauge1 value={30}/>
+      </div>
+      <div id="second_gauge">
+          <Gauge1 value={80}/>
+      </div>
+
+      <div id="third_gauge">
+          <Gauge2 value={50}/>
+      </div>
+      <div id="fourth_gauge">
+          <Gauge2 value={10}/>
       </div>
 
       </SVGDiagram>
