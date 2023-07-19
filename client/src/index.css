@@ -13,3 +13,26 @@ code {
     monospace;
 }
 
+#first_gauge {
+  position: absolute;
+  left: 50px;
+  top: 550px;
+}
+
+#second_gauge {
+  position: absolute;
+  left: 300px;
+  top: 550px;
+}
+
+#third_gauge {
+  position: absolute;
+  left: 50px;
+  top: 750px;
+}
+
+#fourth_gauge {
+  position: absolute;
+  left: 300px;
+  top: 750px;
+}
