@@ -3,8 +3,8 @@ import BatteryGauge from "react-battery-gauge";
 import HomePage from './HomePage.svg';
 import SVGDiagram from "../page-power/SVGDiagram";
 import {IPADDR, PORT} from '../constants';
-import Gauge1 from '../components/gauge1'
-import Gauge2 from "../components/gauge2";
+import GaugeTopDown from '../components/gauge1'
+import GaugeBottomUp from "../components/gauge2";
 
 
 
@@ -65,7 +65,7 @@ function Home() {
         var20={data.var20}
 
       >
-      <div className="battery">
+      <div id ="battery">
         <BatteryGauge
           value={data.battery_percent}
           size={150}
@@ -74,17 +74,17 @@ function Home() {
         />
       </div>
       <div id="first_gauge">
-          <Gauge1 value={30}/>
+          <GaugeTopDown value={30} label={"Fresh"} id="fresh" />
       </div>
       <div id="second_gauge">
-          <Gauge1 value={80}/>
+          <GaugeTopDown value={80} label={"Propane"} id="propane" />
       </div>
 
       <div id="third_gauge">
-          <Gauge2 value={50}/>
+          <GaugeBottomUp value={50} label="Gray" id="gray"/>
       </div>
       <div id="fourth_gauge">
-          <Gauge2 value={10}/>
+          <GaugeBottomUp value={10} label="Black" id="black" />
       </div>
 
       </SVGDiagram>

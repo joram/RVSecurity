@@ -3,8 +3,8 @@ import { interpolateRgb } from 'd3-interpolate';
 import React from 'react';
 import LiquidFillGauge from 'react-liquid-gauge';
 
-function Gauge2(props) {
-    let {value} = props;
+function GaugeBottomUp(props) {
+    let {value, label, id} = props;
     const startColor = '#6495ed'; // cornflowerblue
     const endColor = '#dc143c'; // crimson
     const radius = 80;
@@ -31,7 +31,8 @@ function Gauge2(props) {
         }
     ];
 
-    return <LiquidFillGauge
+    return <div id={id} className="gauge"> <LiquidFillGauge
+       
         style={{ margin: '0 auto' }}
         width={radius * 2}
         height={radius * 2}
@@ -79,6 +80,8 @@ function Gauge2(props) {
             fontFamily: 'Arial'
         }}
     />
+    <div className="gauge_label">{label}</div>
+    </div>
 }
 
-export default Gauge2
+export default GaugeBottomUp

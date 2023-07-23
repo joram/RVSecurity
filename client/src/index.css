@@ -13,26 +13,83 @@ code {
     monospace;
 }
 
+#battery {
+  position: absolute;
+  left: 175px;
+  top: 350px;
+}
+
+.gauge_label {
+  width: 100%;
+  text-align: center;
+  font-size: 30px;
+  font-weight: bold;
+}
+
 #first_gauge {
   position: absolute;
-  left: 50px;
-  top: 550px;
+  left: 25px;
+  top: 500px;
 }
+
+#first_gauge .gauge_label {
+  margin-top: 10px;
+  color: blue;
+}
+
+div.gauge#fresh {
+  border-radius: 60px;
+  border: 5px solid blue;
+  padding: 15px;
+} 
 
 #second_gauge {
   position: absolute;
-  left: 300px;
-  top: 550px;
+  left: 275px;
+  top: 500px;
 }
+
+#second_gauge .gauge_label {
+  margin-top: 10px;
+  color: orange;
+}
+
+div.gauge#propane {
+  border-radius: 60px;
+  border: 5px solid orange;
+  padding: 15px;
+} 
 
 #third_gauge {
   position: absolute;
-  left: 50px;
+  left: 25px;
   top: 750px;
 }
 
+#third_gauge .gauge_label {
+  margin-top: 10px;
+  color: rgb(95, 94, 94);
+}
+
+div.gauge#gray {
+  border-radius: 60px;
+  border: 5px solid rgb(95, 94, 94);
+  padding: 15px;
+} 
+
 #fourth_gauge {
   position: absolute;
-  left: 300px;
+  left: 275px;
   top: 750px;
 }
+
+#fourth_gauge .gauge_label {
+  margin-top: 10px;
+  color: #0b0b0b;
+}
+
+div.gauge#black {
+  border-radius: 60px;
+  border: 5px solid black;
+  padding: 15px;
+} 
