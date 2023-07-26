@@ -3,10 +3,8 @@ import { interpolateRgb } from 'd3-interpolate';
 import React from 'react';
 import LiquidFillGauge from 'react-liquid-gauge';
 
-function GaugeTopDown(props) {
-    let {value, label, id} = props;
-    const startColor = '#dc143c'; // crimson
-    const endColor = '#6495ed'; // cornflowerblue
+function Gauge(props) {
+    let {value, label, id, startColor, endColor} = props;
     const radius = 80;
     const interpolate = interpolateRgb(startColor, endColor);
     const fillColor = interpolate(value/100);
@@ -61,7 +59,7 @@ function GaugeTopDown(props) {
         riseAnimation
         waveAnimation
         waveFrequency={2}
-        waveAmplitude={1}
+        waveAmplitude={3}
         gradient
         gradientStops={gradientStops}
         circleStyle={{
@@ -83,4 +81,4 @@ function GaugeTopDown(props) {
     </div>
 }
 
-export default GaugeTopDown;
+export default Gauge;

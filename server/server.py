@@ -129,28 +129,45 @@ async def data()-> DataResponse:
 @app.get("/data/home")
 async def data()-> DataResponse:
 
- return DataResponse(
-        var1 = 'var1' + ' Watts', 
-        var2 = 'var2',
-        var3 =str('%.1f' % random.randint(10,13)) + " Volts AC",
-        var4 = 'var4',
-        var5 = 'var5',
-        var6 = 'var6',
-        var7 = 'var7',
-        var8 = 'var8',
-        var9 = 'var9',                                #Alternator power
-        var10= 'var10',                                            #flow annimation
-        var11= 'var11',
-        var12= 'var12',
-        var13= 'var13',
-        var14= 'var14',
-        var15= 'var15',
-        var16= 'var16',
-        var17= 'var17',
-        var18= 'var18',
-        var19= 'var19',
-        battery_percent= '50',
-        var20= 'var20',
+    (Charger_AC_power, Charger_AC_voltage, Invert_AC_power, DC_Charger_power, DC_Charger_volts, Invert_DC_power, Invert_status_num)= InvertCalcs()
+    (ShorePower, GenPower)= ATS_Calcs()
+    (SolarPower) = SolcarCalcs()
+    (Batt_Power, Batt_Voltage, Batt_Charge, Batt_Hours_Remaining_str, Batt_status_str) = BatteryCalcs()
+    (AlternatorPower) = AlternatorCalcs(Batt_Power, Invert_status_num, Invert_DC_power, SolarPower)
+
+    #Calc AC and DC Loads since not measured
+    (AC_HeatPump_Load, DC_Load) = LoadCalcs(Invert_status_num, Charger_AC_power, DC_Charger_power, ShorePower, GenPower, Batt_Power, SolarPower, AlternatorPower, Invert_DC_power)
+    (RedMsg, YellowMsg, Time_Str) = HouseKeeping()
+
+    Tank_Fresh = round(mqttclient.AliasData["_var29Tank_Level"]/mqttclient.AliasData["_var30Tank_Resolution"] * 100 )  
+    Tank_Black = round(mqttclient.AliasData["_var32Tank_Level"]/mqttclient.AliasData["_var33Tank_Resolution"] * 100)
+    Tank_Gray = round(mqttclient.AliasData["_var35Tank_Level"]/mqttclient.AliasData["_var36Tank_Resolution"] * 100)   
+    Tank_Propane = round(mqttclient.AliasData["_var38Tank_Level"]/mqttclient.AliasData["_var39Tank_Resolution"] * 100)  
+
+    print('invert power= ', round(Invert_AC_power), round(Invert_DC_power*.8))
+
+    return DataResponse(
+        var1 = 'Outside 60? psi',   # LR outside
+        var2 = 'Inside 60? psi',    # LR inside
+        var3 = 'Inside 60? psi',   # RR inside
+        var4 = 'Outside 60? psi',    # RR outside
+        var5 = str(SolarPower) + ' Watts',
+        var6 = 'not used',                                            
+        var7 = str('%.1f' % Batt_Voltage) + " Volts DC",
+        var8 = str('%.0f' % DC_Load) + ' Watts',
+        var9 = '60? psi',    # LF
+        var10= '60? psi',    # RF
+        var11= 'not used',  
+        var12= str('%.0f' % max(Invert_AC_power, .8 * (Invert_DC_power)) + " Watts"),      #note: .8 is efficiency estimate of inverter
+        var13= Tank_Gray,
+        var14= Tank_Black,
+        var15= Batt_Hours_Remaining_str,
+        var16= 'Battery Status: ' + Batt_status_str,
+        var17= Tank_Fresh,
+        var18= Tank_Propane,
+        var19= str('%.0f' % Batt_Power) + " Watts",
+        battery_percent= Batt_Charge,
+        var20= Time_Str,
         
     )
 

@@ -3,8 +3,7 @@ import BatteryGauge from "react-battery-gauge";
 import HomePage from './HomePage.svg';
 import SVGDiagram from "../page-power/SVGDiagram";
 import {IPADDR, PORT} from '../constants';
-import GaugeTopDown from '../components/gauge1'
-import GaugeBottomUp from "../components/gauge2";
+import Gauge from '../components/gauge1'
 
 
 
@@ -70,21 +69,21 @@ function Home() {
           value={data.battery_percent}
           size={150}
           padding={5}
-          aspectRatio={0.52}
+          aspectRatio={0.5}
         />
       </div>
       <div id="first_gauge">
-          <GaugeTopDown value={30} label={"Fresh"} id="fresh" />
+          <Gauge value={data.var17} label={"Fresh"} id="fresh" startColor="#24E9EF" endColor="24E9EF"/>
       </div>
       <div id="second_gauge">
-          <GaugeTopDown value={80} label={"Propane"} id="propane" />
+          <Gauge value={data.var18} label={"Propane"} id="propane" startColor="#FF0000" endColor="FF0000"/>
       </div>
 
       <div id="third_gauge">
-          <GaugeBottomUp value={50} label="Gray" id="gray"/>
+          <Gauge value={data.var13} label="Gray" id="gray" startColor="#484848" endColor="484848"/>
       </div>
       <div id="fourth_gauge">
-          <GaugeBottomUp value={10} label="Black" id="black" />
+          <Gauge value={data.var14} label="Black" id="black" startColor="#000000" endColor="000000"/>
       </div>
 
       </SVGDiagram>
