@@ -182,7 +182,7 @@ app.mount("/", static_files, name="ui")
 if __name__ == "__main__":
     #kick off threads here  
     # mqttclient("pub","localhost", 1883, "dgn_variables.json",'_var', 'RVC', debug) 
-    t1 = threading.Thread(target=mqttclient.mqttclient("sub","localhost", 1883, "dgn_variables.json",'_var', 'RVC', 0).run_mqtt_infinite)
+    t1 = threading.Thread(target=mqttclient.mqttclient("sub","localhost", 1883, '_var', 'RVC', 0).run_mqtt_infinite)
     #t1 = threading.Thread(target=mqttclient.mqttclient().printhello)
     t1.start()
 
