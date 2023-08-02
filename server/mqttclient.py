@@ -34,7 +34,7 @@ class mqttclient():
                         TargetTopics[topic] = {}
                     TargetTopics[topic][entryvar] = tmp
                     local_topic = topic + '/' + entryvar
-                    AliasData[tmp] = ''
+                    AliasData[tmp] = 3.14
                     MQTTNameToAliasName[local_topic] = tmp
         if debug > 0:
             #print('>>All Data:')

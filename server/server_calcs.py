@@ -276,7 +276,7 @@ def LoadCalcs(Invert_status_num, Charger_AC_power, DC_Charger_power, ShorePower,
 
 def HouseKeeping():
     #House Keeping Messages
-    RedLamp = mqttclient.AliasData["_var07Red"]
+    RedLamp = str(mqttclient.AliasData["_var07Red"])
     if RedLamp == '00':
         RedMsg = ''
     else:
