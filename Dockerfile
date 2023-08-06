@@ -1,6 +1,8 @@
 FROM python:3.10.11-slim-buster AS reactbase
 RUN python3 -m pip install --upgrade pip
 RUN apt-get update && apt-get install build-essential -y
+RUN apt-get update && apt-get install -y git
+
 
 WORKDIR /app/rvsecurity/server
 COPY server/setup.py .
@@ -11,8 +13,8 @@ WORKDIR /app/rvsecurity
 COPY server/build server/build/.
 COPY server/server.py server/.
 COPY server/server_calcs.py server/.
-COPY server/mqttclient.py server/.
-COPY server/dgn_variables.json server/.
+#COPY server/mqttclient.py server/.
+#COPY server/dgn_variables.json server/.
 COPY server/constants.json server/.
 
 WORKDIR /app/rvsecurity/server

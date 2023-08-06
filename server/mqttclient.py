@@ -106,7 +106,8 @@ class mqttclient():
                 os.sys.stdout.flush()
                 msg_counter = 0
     
-    def pub(self, payload, qos=0, retain=False):
+    @staticmethod
+    def pub(payload, qos=0, retain=False):
         global client, debug, topic_prefix
                 
         if "instance" in payload:

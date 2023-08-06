@@ -2,7 +2,8 @@
 import threading
 import uvicorn
 #import alarm
-import mqttclient
+#import MQTTClient
+import rvglue
 from typing import Annotated
 
 from fastapi import FastAPI, Body
@@ -12,7 +13,6 @@ from starlette.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 import random
 from server_calcs import *
-
 
 
 
@@ -139,10 +139,10 @@ async def data()-> DataResponse:
     (AC_HeatPump_Load, DC_Load) = LoadCalcs(Invert_status_num, Charger_AC_power, DC_Charger_power, ShorePower, GenPower, Batt_Power, SolarPower, AlternatorPower, Invert_DC_power)
     (RedMsg, YellowMsg, Time_Str) = HouseKeeping()
 
-    Tank_Fresh = round(mqttclient.AliasData["_var29Tank_Level"]/mqttclient.AliasData["_var30Tank_Resolution"] * 100 )  
-    Tank_Black = round(mqttclient.AliasData["_var32Tank_Level"]/mqttclient.AliasData["_var33Tank_Resolution"] * 100)
-    Tank_Gray = round(mqttclient.AliasData["_var35Tank_Level"]/mqttclient.AliasData["_var36Tank_Resolution"] * 100)   
-    Tank_Propane = round(mqttclient.AliasData["_var38Tank_Level"]/mqttclient.AliasData["_var39Tank_Resolution"] * 100)  
+    Tank_Fresh = round(rvglue.rvglue.AliasData["_var29Tank_Level"]/rvglue.rvglue.AliasData["_var30Tank_Resolution"] * 100 )  
+    Tank_Black = round(rvglue.rvglue.AliasData["_var32Tank_Level"]/rvglue.rvglue.AliasData["_var33Tank_Resolution"] * 100)
+    Tank_Gray = round(rvglue.rvglue.AliasData["_var35Tank_Level"]/rvglue.rvglue.AliasData["_var36Tank_Resolution"] * 100)   
+    Tank_Propane = round(rvglue.rvglue.AliasData["_var38Tank_Level"]/rvglue.rvglue.AliasData["_var39Tank_Resolution"] * 100)  
 
     print('invert power= ', round(Invert_AC_power), round(Invert_DC_power*.8))
 
@@ -181,9 +181,11 @@ app.mount("/", static_files, name="ui")
 
 if __name__ == "__main__":
     #kick off threads here  
-    # mqttclient("pub","localhost", 1883, "dgn_variables.json",'_var', 'RVC', debug) 
-    t1 = threading.Thread(target=mqttclient.mqttclient("sub","localhost", 1883, '_var', 'RVC', 0).run_mqtt_infinite)
-    #t1 = threading.Thread(target=mqttclient.mqttclient().printhello)
+    # MQTTClient("pub","localhost", 1883, "dgn_variables.json",'_var', 'RVC', debug) 
+    debug = 1
+    client = MQTTClient("sub","localhost", 1883, '_var', 'RVC', debug)
+    t1 = threading.Thread(target=client.run_mqtt_infinite)
+    #t1 = threading.Thread(target=MQTTClient.MQTTClient().printhello)
     t1.start()
 
     # "0.0.0.0" => accept requests from any IP addr

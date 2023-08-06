@@ -1,7 +1,9 @@
 import json
 import time
 import random
-import mqttclient
+#import MQTTClient
+from  rvglue import MQTTClient
+from rvglue.rvglue import *
 import datetime
 
 
@@ -48,7 +50,7 @@ def FlowMotion():
 
 def GenAllFlows(Invert_status_num, BatteryPower, SolarPower, ShorePower, GenPower, AltPower):
     
-    Invert_status_str = mqttclient.AliasData["_var15Invert_status_name"]                                  #Invertor string meaning"
+    Invert_status_str = AliasData["_var15Invert_status_name"]                                  #Invertor string meaning"
 
     RightMotion, LeftMotion = FlowMotion()  
     if BatteryPower == 0:
@@ -104,9 +106,9 @@ def BatteryCalcs():
     #   12V battery system => 12V * 250 Amp-Hr = 3000 Watt-Hr battery capacity
 
     try:
-        Batt_Charge = int(mqttclient.AliasData["_var20Batt_charge"])                                    #Battery % charged"
-        Batt_Current = int(mqttclient.AliasData["_var19Batt_current"])                                  #Battery current
-        Batt_Voltage = float(mqttclient.AliasData["_var18Batt_voltage"])                                #Battery voltage"  TODO which DC voltage to use???
+        Batt_Charge = int(AliasData["_var20Batt_charge"])                                    #Battery % charged"
+        Batt_Current = int(AliasData["_var19Batt_current"])                                  #Battery current
+        Batt_Voltage = float(AliasData["_var18Batt_voltage"])                                #Battery voltage"  TODO which DC voltage to use???
     except:
         #default values
         Batt_Voltage = 12.5 
@@ -149,7 +151,7 @@ def BatteryCalcs():
 def InvertCalcs():
     global Invert_AC_power_prev
     #Inverter Power Calculations
-    Invert_status_num = mqttclient.AliasData["_var16Invert_status_num"]                                   #DC Invertor numerical state"
+    Invert_status_num = AliasData["_var16Invert_status_num"]                                   #DC Invertor numerical state"
     """note: Invert_status_num meaning = 
         0 - Disabled
         1 - Invert
@@ -160,23 +162,23 @@ def InvertCalcs():
         6. Generator support
     """
     #Charger AC input (unidirectional input into charger/invertor. Power either from Gen or Shore )
-    Charger_AC_current =float(mqttclient.AliasData["_var02Charger_AC_current"])                                #AC charger RMS current" 
-    Charger_AC_voltage =float(mqttclient.AliasData["_var03Charger_AC_voltage"])                                #AC charger RMS voltage" 
+    Charger_AC_current =float(AliasData["_var02Charger_AC_current"])                                #AC charger RMS current" 
+    Charger_AC_voltage =float(AliasData["_var03Charger_AC_voltage"])                                #AC charger RMS voltage" 
     Charger_AC_power = Charger_AC_voltage * Charger_AC_current                                                     #AC charger power 
     #Charger DC output side from AC Charger. Power either from Gen or Shore
-    DC_Charger_current=(mqttclient.AliasData["_var04Charger_current"])                                   #DC charger  current"  
-    DC_Charger_volts=float(mqttclient.AliasData["_var05Charger_voltage"])                                #DC charger  voltage" 
+    DC_Charger_current=(AliasData["_var04Charger_current"])                                   #DC charger  current"  
+    DC_Charger_volts=float(AliasData["_var05Charger_voltage"])                                #DC charger  voltage" 
     DC_Charger_power = DC_Charger_volts * DC_Charger_current                                                     #DC charger power
     #Inverter AC output (Drives AC Coach only; power either from DC sdie or Shore/Gen) 
-    Invert_AC_voltage=float(mqttclient.AliasData["_var10Invert_AC_voltage"])                             #AC invertor RMS voltage" 
-    Invert_AC_current=float(mqttclient.AliasData["_var09Invert_AC_current"])                                #AC invertor RMS current"
+    Invert_AC_voltage=float(AliasData["_var10Invert_AC_voltage"])                             #AC invertor RMS voltage" 
+    Invert_AC_current=float(AliasData["_var09Invert_AC_current"])                                #AC invertor RMS current"
     Invert_AC_power=Invert_AC_voltage *Invert_AC_current                                                      #AC invertor power
 
     
     #DC Invertor input (Only operates if no Shore/Gen power. Power from DC side only)
     #Don't care much about the DC side.  Only necessary for inverter efficiency calculations
-    Invert_DC_Amp=float(mqttclient.AliasData["_var13Invert_DC_Amp"])                               #DC Invertor current"
-    Invert_DC_power = mqttclient.AliasData["_var14Invert_DC_Volt"] * Invert_DC_Amp                 #DC Invertor power
+    Invert_DC_Amp=float(AliasData["_var13Invert_DC_Amp"])                               #DC Invertor current"
+    Invert_DC_power = AliasData["_var14Invert_DC_Volt"] * Invert_DC_Amp                 #DC Invertor power
     
     #heuristics to compinsate for very lower power values and poor A/D resolution
     if Invert_status_num == 1:
@@ -199,8 +201,8 @@ def InvertCalcs():
 
 def ATS_Calcs():
     try:
-        ATS_Power = mqttclient.AliasData["_var23ATS_AC_voltage"] * mqttclient.AliasData["_var22ATS_AC_current"] 
-        ATS_Line = mqttclient.AliasData["_var21ATS_Line"]
+        ATS_Power = AliasData["_var23ATS_AC_voltage"] * AliasData["_var22ATS_AC_current"] 
+        ATS_Line = AliasData["_var21ATS_Line"]
     except:
         ATS_Power = 0
         ATS_Line = 0
@@ -216,7 +218,7 @@ def ATS_Calcs():
 
 def SolcarCalcs():
     try:
-        SolarPower = (mqttclient.AliasData["_var26Solar_voltage"] * mqttclient.AliasData["_var27Solar_current"])                                #Solar power"
+        SolarPower = (AliasData["_var26Solar_voltage"] * AliasData["_var27Solar_current"])                                #Solar power"
     except:
         SolarPower = 0
 
@@ -230,9 +232,9 @@ def AlternatorCalcs(Batt_Power, Invert_status_num, InvertorDCPower, SolarPower):
     elif Invert_status_num == 1:                # Inverter
         #Only power sources are Alternator and Solar
         #Assume that the battery is charging from the Alternator and DC_Load is unchanged
-        #AC_Load = mqttclient.AliasData["_var24RV_Loads_AC"]
+        #AC_Load = AliasData["_var24RV_Loads_AC"]
         # try:
-        #     DC_Load = mqttclient.AliasData["_var25RV_Loads_DC"]
+        #     DC_Load = AliasData["_var25RV_Loads_DC"]
         #     if DC_Load == '':
         #         DC_Load = 54
         # except:
@@ -263,6 +265,20 @@ def LoadCalcs(Invert_status_num, Charger_AC_power, DC_Charger_power, ShorePower,
         #Shouldn't get here
         DC_Load = -1
         print('ERROR: Invert_status_num = >', Invert_status_num, '<')
+
+    # "RV_Loads/1": {
+    #                     "instance": 1,
+    #                     "name": "RV_Loads",
+    #                     "AC Load":                                      "_var24RV_Loads_AC",
+    #                     "DC Load":                                      "_var25RV_Loads_DC",
+    #                     "timestamp": "1672774554.8647683"}   
+
+    #Update the dictionary entry with new data and publish
+    AllData['RV_Loads/1']["AC Load"] = 10 * random.random()
+    AllData['RV_Loads/1']["CD Load"] =  10 * random.random() + 10
+    AllData['RV_Loads/1']["timestamp"] = 10 * random.random()+ 20
+    MQTTClient.pub(AllData['RV_Loads/1'])  #this line doesn't work<<<
+    
     
     #publish DC Load to mqtt TODO   
     # 
@@ -276,18 +292,18 @@ def LoadCalcs(Invert_status_num, Charger_AC_power, DC_Charger_power, ShorePower,
 
 def HouseKeeping():
     #House Keeping Messages
-    RedLamp = str(mqttclient.AliasData["_var07Red"])
+    RedLamp = str(AliasData["_var07Red"])
     if RedLamp == '00':
         RedMsg = ''
     else:
         RedMsg = RedLamp + ' Red Lamp Fault'
-    YellowLamp =str(mqttclient.AliasData["_var08Yellow"]) + " Yellow Lamp" 
+    YellowLamp =str(AliasData["_var08Yellow"]) + " Yellow Lamp" 
     YellowMsg = ''
     
     #TODO replace time with wall clock time
-    Time_Str = str(datetime.datetime.fromtimestamp(float(mqttclient.AliasData["_var01Timestamp"])))
+    Time_Str = str(datetime.datetime.fromtimestamp(float(AliasData["_var01Timestamp"])))
     Time_Str = Time_Str[5:19]
-    #Time_Str =str('%.1f' % ((float(mqttclient.AliasData["_var01Timestamp"])-timebase)/60)) + " Time"
+    #Time_Str =str('%.1f' % ((float(AliasData["_var01Timestamp"])-timebase)/60)) + " Time"
     return(RedMsg, YellowMsg, Time_Str)
 
 if __name__ == "__main__":
