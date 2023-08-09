@@ -200,28 +200,37 @@ def InvertCalcs():
     return(Charger_AC_power, Charger_AC_voltage, Invert_AC_power, DC_Charger_power, DC_Charger_volts, Invert_DC_power, Invert_status_num)
 
 def ATS_Calcs():
-    try:
-        ATS_Power = AliasData["_var23ATS_AC_voltage"] * AliasData["_var22ATS_AC_current"] 
-        ATS_Line = AliasData["_var21ATS_Line"]
-    except:
-        ATS_Power = 0
-        ATS_Line = 0
+    # try:
+    #     ATS_Power = AliasData["_var23ATS_AC_voltage"] * AliasData["_var22ATS_AC_current"] 
+    #     ATS_Line = AliasData["_var21ATS_Line"]
+    # except:
+    #     ATS_Power = 0
+    #     ATS_Line = 0
 
-    if ATS_Line == 1:
-        ShorePower = ATS_Power
-        GenPower = 0
-    else:
-        ShorePower = 0
-        GenPower = ATS_Power  
+    # if ATS_Line == 1:
+    #     ShorePower = ATS_Power
+    #     GenPower = 0
+    # else:
+    #     ShorePower = 0
+    #     GenPower = ATS_Power  
+    
+    #huerestic until better info available; assumes airconditioner is NOT on TODO
+    Charger_AC_current =float(AliasData["_var02Charger_AC_current"])                                #AC charger RMS current" 
+    Charger_AC_voltage =float(AliasData["_var03Charger_AC_voltage"])                                #AC charger RMS voltage" 
+    ShorePower = round(Charger_AC_voltage * Charger_AC_current  )
+    GenPower = 0
+
 
     return(ShorePower, GenPower)  
 
 def SolcarCalcs():
-    try:
-        SolarPower = (AliasData["_var26Solar_voltage"] * AliasData["_var27Solar_current"])                                #Solar power"
-    except:
-        SolarPower = 0
+    # try:
+    #     SolarPower = (AliasData["_var26Solar_voltage"] * AliasData["_var27Solar_current"])                                #Solar power"
+    # except:
+    #     SolarPower = 0
 
+    #don't know this value so set to zero  TODO
+    SolarPower = 0
     return(SolarPower)
 
 def AlternatorCalcs(Batt_Power, Invert_status_num, InvertorDCPower, SolarPower):
@@ -245,7 +254,7 @@ def AlternatorCalcs(Batt_Power, Invert_status_num, InvertorDCPower, SolarPower):
         #shouldn't get here
         AlternatorPower = 0
 
-    #only porivde reasonable values
+    #only proivde reasonable values
     if AlternatorPower < 0:
         AlternatorPower = 0
     elif AlternatorPower > 2500:
