@@ -51,4 +51,5 @@ if __name__ == "__main__":
     constants = ParseInput(fp_source)
     outjson = json.dumps(constants, indent = 4)
     fp_dst.write(outjson)
+    print(outjson)
     close_exit(fp_source, fp_dst, 0, 'OK - Done')

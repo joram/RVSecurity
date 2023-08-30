@@ -10,6 +10,7 @@
         },
         {
             "name": "Python: Current File",
+            "cwd": "${fileDirname}",
             "type": "python",
             "request": "launch",
             "program": "${file}",
