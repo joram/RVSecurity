@@ -4,6 +4,7 @@ import random
 #import MQTTClient
 from  rvglue import MQTTClient
 from rvglue.rvglue import *
+from tzlocal import get_localzone
 import datetime
 
 
@@ -310,9 +311,10 @@ def HouseKeeping():
     YellowMsg = ''
     
     #TODO replace time with wall clock time
-    Time_Str = str(datetime.datetime.fromtimestamp(float(AliasData["_var01Timestamp"])))
-    Time_Str = Time_Str[5:19]
-    #Time_Str =str('%.1f' % ((float(AliasData["_var01Timestamp"])-timebase)/60)) + " Time"
+    local_timezone = get_localzone()
+    timestamp = float(AliasData["_var01Timestamp"])
+    datetime_obj = datetime.datetime.fromtimestamp(timestamp, tz=local_timezone)
+    Time_Str = datetime_obj.strftime("%Y-%m-%d %I:%M:%S %p")
     return(RedMsg, YellowMsg, Time_Str)
 
 if __name__ == "__main__":
