@@ -1,8 +1,14 @@
-FROM python:3.10.11-slim-buster AS reactbase
+FROM node:16-slim AS reactbuild
+WORKDIR /app/client
+COPY client/package*.json ./
+RUN npm install
+COPY client/ ./
+RUN npm run build
+
+FROM python:3.10-slim AS reactbase
 RUN python3 -m pip install --upgrade pip
 RUN apt-get update && apt-get install build-essential -y
 RUN apt-get update && apt-get install -y git
-
 
 WORKDIR /app/rvsecurity/server
 COPY server/setup.py .
@@ -10,7 +16,7 @@ RUN python3 -m pip install --use-pep517 .
 
 FROM reactbase
 WORKDIR /app/rvsecurity
-COPY server/build server/build/.
+COPY --from=reactbuild /app/client/build server/build/.
 COPY server/server.py server/.
 COPY server/server_calcs.py server/.
 #COPY server/mqttclient.py server/.
