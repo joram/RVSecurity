@@ -3,7 +3,7 @@
 from setuptools import find_packages, setup
 
 packages = [
-    "uvicorn[standard]==0.15.0",
+    "uvicorn[standard]>=0.18.0,<1.0.0",  # Updated to newer version that works better with ARM64
     "gunicorn==20.1.0",
     "fastapi==0.89.1",
     "requests==2.27.1",

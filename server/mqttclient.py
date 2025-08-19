@@ -90,7 +90,7 @@ class mqttclient():
 
         for item in TargetTopics[msg.topic]:
             if item == 'instance':
-                break
+                continue  # Skip instance field but continue processing other fields
             if debug>2:
                 print('*** ',item,'= ', msg_dict[item])
             tmp = msg.topic + '/' + item

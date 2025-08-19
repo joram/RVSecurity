@@ -107,7 +107,7 @@ def BatteryCalcs():
     #   12V battery system => 12V * 250 Amp-Hr = 3000 Watt-Hr battery capacity
 
     try:
-        Batt_Charge = int(AliasData["_var20Batt_charge"])                                    #Battery % charged"
+        Batt_Charge = float(AliasData["_var20Batt_charge"])                                    #Battery % charged"
         Batt_Current = int(AliasData["_var19Batt_current"])                                  #Battery current
         Batt_Voltage = float(AliasData["_var18Batt_voltage"])                                #Battery voltage"  TODO which DC voltage to use???
     except:
