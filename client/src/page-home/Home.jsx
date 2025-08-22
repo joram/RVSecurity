@@ -21,10 +21,24 @@ function Home() {
       }
     )
       .then(function (response) {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
         return response.json();
       })
       .then(function (myJson) {
         setData(myJson)
+      })
+      .catch(function (error) {
+        console.error('Error fetching data:', error);
+        // Set some default data so the page doesn't crash
+        setData({
+          var17: 'N/A',
+          var18: 'N/A', 
+          var13: 'N/A',
+          var14: 'N/A',
+          battery_percent: 0
+        });
       });
   }
 
@@ -39,7 +53,7 @@ function Home() {
 
   return (
 
-    <div dsclassName="Home">
+    <div className="Home">
       <SVGDiagram
         filename={HomePage}
         var1={data.var1}
@@ -72,19 +86,19 @@ function Home() {
           aspectRatio={0.5}
         />
       </div>
-      <div id="first_gauge">
-          <Gauge value={data.var17} label={"Fresh"} id="fresh" startColor="#24E9EF" endColor="24E9EF"/>
-      </div>
-      <div id="second_gauge">
-          <Gauge value={data.var18} label={"Propane"} id="propane" startColor="#FF0000" endColor="FF0000"/>
-      </div>
+    <div id="first_gauge">
+      <Gauge value={data.var17} label={"Fresh"} id="fresh" startColor="#24E9EF" endColor="24E9EF"/>
+    </div>
+    <div id="second_gauge">
+      <Gauge value={data.var18} label={"Propane"} id="propane" startColor="#FF0000" endColor="FF0000"/>
+    </div>
 
-      <div id="third_gauge">
-          <Gauge value={data.var13} label="Gray" id="gray" startColor="#484848" endColor="484848"/>
-      </div>
-      <div id="fourth_gauge">
-          <Gauge value={data.var14} label="Black" id="black" startColor="#000000" endColor="000000"/>
-      </div>
+    <div id="third_gauge">
+      <Gauge value={data.var13} label="Gray" id="gray" startColor="#484848" endColor="484848"/>
+    </div>
+    <div id="fourth_gauge">
+      <Gauge value={data.var14} label="Black" id="black" startColor="#000000" endColor="000000"/>
+    </div>
 
       </SVGDiagram>
     </div>

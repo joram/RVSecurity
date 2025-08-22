@@ -1,7 +1,9 @@
+# Multi-stage build for RV Security monitoring application
 FROM node:16-slim AS reactbuild
 WORKDIR /app/client
 COPY client/package*.json ./
-RUN npm install
+# Install with legacy peer deps for compatibility with d3 packages
+RUN npm install --legacy-peer-deps
 COPY client/ ./
 RUN npm run build
 
@@ -25,6 +27,5 @@ COPY server/constants.json server/.
 
 WORKDIR /app/rvsecurity/server
 
-#ENV UVICORN_PORT=80
-#RUN python3 -m pip install --use-pep517 .[dev]
-CMD python3 server.py
+# Use JSON format for better signal handling
+CMD ["python3", "server.py"]

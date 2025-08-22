@@ -40,7 +40,7 @@ function Power() {
 
   return (
 
-    <div dsclassName="Power">
+    <div className="Power">
 
       <SVGDiagram
         filename={Sophie}

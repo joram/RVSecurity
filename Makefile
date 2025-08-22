@@ -1,14 +1,14 @@
-
 setup:
 # do this once to setup the environment
-	cd server; python3 -m pip install .[dev]
-	#$NVM_DIR/nvm use default
-	#cd client; npm install
+	python3 -m venv venv
+	./venv/bin/pip install --upgrade pip
+	cd server; ../venv/bin/pip install .[dev]
+	cd client; npm install --legacy-peer-deps
 
 server_start:
 # do this when working on the server.py code
 # start_server in a separate cmd window; always first
-	cd server; ./server.py
+	cd server; ../venv/bin/python ./server.py
 
 client_start:
 # Only need to make client_start if changing the client code

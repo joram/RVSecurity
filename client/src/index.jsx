@@ -1,30 +1,37 @@
 import React from 'react';
 import ReactDOM from "react-dom";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Layout from "./pages/Layout";
-import Home from "./page-home/Home";
-import Contact from "./pages/Contact";
-import NoPage from "./pages/NoPage";
-import Power from "./page-power/Power";
-import reportWebVitals from './reportWebVitals';
 import 'semantic-ui-css/semantic.min.css';
 import './index.css';
 import {IPADDR, PORT} from './constants';
 
+// Import components with error handling
+let Layout, Home, Contact, NoPage, Power;
 
-console.log(IPADDR, PORT)
+try {
+  Layout = require("./pages/Layout").default;
+  Home = require("./page-home/Home").default;
+  Contact = require("./pages/Contact").default;
+  NoPage = require("./pages/NoPage").default;
+  Power = require("./page-power/Power").default;
+} catch (error) {
+  console.error("Error importing components:", error);
+}
+
+console.log("Constants:", IPADDR, PORT)
+console.log("Components loaded:", {Layout, Home, Contact, NoPage, Power});
 
 export default function App() {
   return (
     <div className="body">
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Home />} />
-            <Route path="/index.html" element={<Home />} />
-            <Route path="contact" element={<Contact />} />
-            <Route path="power" element={<Power />}/>
-            <Route path="*" element={<NoPage />} />
+          <Route path="/" element={Layout ? <Layout /> : <div>Layout not loaded</div>}>
+            <Route index element={Home ? <Home /> : <div>Home not loaded</div>} />
+            <Route path="/index.html" element={Home ? <Home /> : <div>Home not loaded</div>} />
+            <Route path="contact" element={Contact ? <Contact /> : <div>Contact not loaded</div>} />
+            <Route path="power" element={Power ? <Power /> : <div>Power not loaded</div>}/>
+            <Route path="*" element={NoPage ? <NoPage /> : <div>NoPage not loaded</div>} />
           </Route>
         </Routes>
       </BrowserRouter>
@@ -32,22 +39,21 @@ export default function App() {
   );
 }
 
-ReactDOM.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-  document.getElementById('root')
-);
-
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
-reportWebVitals();
-
-/*
-const root = ReactDOM.createRoot(document.getElementById('root'));
-
-root.render(<App />); 
-
-reportWebVitals();
-*/
+try {
+  ReactDOM.render(
+    <App />,
+    document.getElementById('root')
+  );
+  console.log("App rendered successfully");
+} catch (error) {
+  console.error("Error rendering app:", error);
+  // Fallback rendering
+  ReactDOM.render(
+    <div style={{padding: '20px'}}>
+      <h1>Error Loading App</h1>
+      <p>Check console for details</p>
+      <pre>{error.toString()}</pre>
+    </div>,
+    document.getElementById('root')
+  );
+}

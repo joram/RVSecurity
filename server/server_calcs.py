@@ -3,9 +3,12 @@ import time
 import random
 #import MQTTClient
 from  rvglue import MQTTClient
-from rvglue.rvglue import *
+import rvglue.rvglue
 from tzlocal import get_localzone
 import datetime
+
+# Create an alias for easier access
+AliasData = rvglue.rvglue.AliasData
 
 
 try:
@@ -284,10 +287,11 @@ def LoadCalcs(Invert_status_num, Charger_AC_power, DC_Charger_power, ShorePower,
     #                     "timestamp": "1672774554.8647683"}   
 
     #Update the dictionary entry with new data and publish
-    AllData['RV_Loads/1']["AC Load"] = 10 * random.random()
-    AllData['RV_Loads/1']["CD Load"] =  10 * random.random() + 10
-    AllData['RV_Loads/1']["timestamp"] = 10 * random.random()+ 20
-    MQTTClient.pub(AllData['RV_Loads/1'])  #this line doesn't work<<<
+    # TODO: Fix AllData import issue
+    # AllData['RV_Loads/1']["AC Load"] = 10 * random.random()
+    # AllData['RV_Loads/1']["CD Load"] =  10 * random.random() + 10
+    # AllData['RV_Loads/1']["timestamp"] = 10 * random.random()+ 20
+    # MQTTClient.pub(AllData['RV_Loads/1'])  #this line doesn't work<<<
     
     
     #publish DC Load to mqtt TODO   

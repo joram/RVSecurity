@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import threading
 import uvicorn
+import os
 #import alarm
 #import MQTTClient
 import rvglue
@@ -17,7 +18,10 @@ from server_calcs import *
 
 
 app = FastAPI()
-index_content = open("build/index.html").read()
+try:
+    index_content = open("build/index.html").read()
+except FileNotFoundError:
+    index_content = "<html><body><h1>RV Security Server Running</h1><p>Build the client first with 'make build'</p></body></html>"
 
 app.add_middleware(
     CORSMiddleware,
@@ -175,8 +179,10 @@ async def data()-> DataResponse:
 async def status() -> dict:
     return {"hello": "world and more"}
 
-static_files = StaticFiles(directory="build")
-app.mount("/", static_files, name="ui")
+import os
+if os.path.exists("build") and os.path.isdir("build"):
+    static_files = StaticFiles(directory="build")
+    app.mount("/", static_files, name="ui")
 
 
 if __name__ == "__main__":
@@ -196,5 +202,5 @@ if __name__ == "__main__":
     print(constants["IPADDR"], constants["PORT"])
     
 
-    uvicorn.run(app, host="0.0.0.0", port=constants["PORT"])
+    uvicorn.run(app, host="0.0.0.0", port=int(constants["PORT"]))
     
