@@ -3,29 +3,22 @@ import './Power.css';
 import Sophie from "./Sophie1.svg";
 import SVGDiagram from "./SVGDiagram";
 import BatteryGauge from "react-battery-gauge";
-import {IPADDR, PORT} from '../constants';
+import { fetchFromServer } from '../utils/api';
 
 
-console.log(IPADDR, PORT)
+console.log("Power component loaded")
 
 function Power() {
   let [data, setData] = useState({});
   const getData = () => {
-    let url = 'http://'.concat(IPADDR,':',PORT,'/data/power')
-    fetch(url
-      , {
-        method: "GET",
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
-      }
-    )
-      .then(function (response) {
-        return response.json();
-      })
+    fetchFromServer('/data/power')
       .then(function (myJson) {
         setData(myJson)
+      })
+      .catch(function (error) {
+        console.error('Error fetching power data:', error);
+        // Set some default data so the page doesn't crash
+        setData({});
       });
   }
 

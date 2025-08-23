@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { Outlet, Link } from "react-router-dom";
 import {Button, Menu} from "semantic-ui-react";
 import { useState } from 'react';
-import {IPADDR, PORT} from '../constants';
+import { fetchFromServer, getServerUrl } from '../utils/api';
 
 
 function TogglableButton(props) {
@@ -31,7 +31,7 @@ function TogglableButton(props) {
 }
 function tellServerAlarmStateChanged(state, alarmName){
   console.log("Alarm state changed: " + state + " " + alarmName)
-  let url = 'http://'.concat(IPADDR,':',PORT,'/api/alarmpost')
+  let url = `${getServerUrl()}/api/alarmpost`;
   fetch(url, {
     method: "POST",
     headers: {
@@ -61,21 +61,15 @@ function Layout() {
   let [interiorAlarmState, setInteriorAlarmState] = useState(false);
 
   function getAlarmStatesFromServer(){
-    let url = 'http://'.concat(IPADDR,':',PORT,'/api/alarmget')
-    fetch(url, {
-      method: "GET",
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-    })
-    .then(response => response.json())
+    fetchFromServer('/api/alarmget')
     .then(data => {
       // console.log(data);
       setBikeAlarmState(data.bike);
       setInteriorAlarmState(data.interior);
     })
-  
+    .catch(error => {
+      console.error('Error fetching alarm states:', error);
+    });
   }
 
   useEffect(() => {

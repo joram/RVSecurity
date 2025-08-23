@@ -2,30 +2,16 @@ import React, { useEffect, useState } from "react";
 import BatteryGauge from "react-battery-gauge";
 import HomePage from './HomePage.svg';
 import SVGDiagram from "../page-power/SVGDiagram";
-import {IPADDR, PORT} from '../constants';
+import { fetchFromServer } from '../utils/api';
 import Gauge from '../components/gauge1'
 
 
 
 function Home() {
   let [data, setData] = useState({});
+  
   const getData = () => {
-    let url = 'http://'.concat(IPADDR,':',PORT,'/data/home')
-    fetch(url
-      , {
-        method: "GET",
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
-      }
-    )
-      .then(function (response) {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-      })
+    fetchFromServer('/data/home')
       .then(function (myJson) {
         setData(myJson)
       })

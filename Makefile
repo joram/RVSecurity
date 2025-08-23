@@ -26,7 +26,7 @@ constants_copy:
 
 
 build: constants_copy
-#this is only needed whey you're ready to deploy
+#this is only needed when you're ready to deploy locally (non-Docker)
 	cd client; npm run-script build
 	cd client; rm -Rf ../server/build; mv ./build ../server/
 
