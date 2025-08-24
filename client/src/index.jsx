@@ -6,12 +6,12 @@ import './index.css';
 import {IPADDR, PORT} from './constants';
 
 // Import components with error handling
-let Layout, Home, Contact, NoPage, Power;
+let Layout, Home, WiFi, NoPage, Power;
 
 try {
   Layout = require("./pages/Layout").default;
   Home = require("./page-home/Home").default;
-  Contact = require("./pages/Contact").default;
+  WiFi = require("./page-wifi/WiFi").default;
   NoPage = require("./pages/NoPage").default;
   Power = require("./page-power/Power").default;
 } catch (error) {
@@ -19,7 +19,7 @@ try {
 }
 
 console.log("Constants:", IPADDR, PORT)
-console.log("Components loaded:", {Layout, Home, Contact, NoPage, Power});
+console.log("Components loaded:", {Layout, Home, WiFi, NoPage, Power});
 
 export default function App() {
   return (
@@ -29,7 +29,7 @@ export default function App() {
           <Route path="/" element={Layout ? <Layout /> : <div>Layout not loaded</div>}>
             <Route index element={Home ? <Home /> : <div>Home not loaded</div>} />
             <Route path="/index.html" element={Home ? <Home /> : <div>Home not loaded</div>} />
-            <Route path="contact" element={Contact ? <Contact /> : <div>Contact not loaded</div>} />
+            <Route path="wifi" element={WiFi ? <WiFi /> : <div>WiFi not loaded</div>} />
             <Route path="power" element={Power ? <Power /> : <div>Power not loaded</div>}/>
             <Route path="*" element={NoPage ? <NoPage /> : <div>NoPage not loaded</div>} />
           </Route>

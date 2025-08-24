@@ -1,0 +1,111 @@
+.wifi-page {
+  padding: 20px;
+  min-height: 100vh;
+  background-color: #f8f9fa;
+}
+
+/* Container is now handled by inline styles for better control */
+
+.wifi-page .wifi-form-card,
+.wifi-page .wifi-output-card {
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important;
+  border-radius: 8px !important;
+}
+
+.wifi-page .wifi-form-card {
+  background: white !important;
+}
+
+.wifi-page .wifi-output-card {
+  background: white !important;
+}
+
+.form-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.output-segment {
+  padding: 10px !important;
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.output-segment textarea {
+  background: transparent !important;
+  border: none !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+  resize: vertical !important;
+  box-shadow: none !important;
+  min-height: 250px !important;
+}
+
+.output-segment textarea:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .wifi-page {
+    padding: 10px;
+  }
+  
+  .form-buttons {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .form-buttons .button {
+    width: 100%;
+  }
+  
+  /* Make cards full width on mobile */
+  .wifi-page .wifi-form-card,
+  .wifi-page .wifi-output-card {
+    margin: 0 !important;
+  }
+}
+
+/* Extra small phones */
+@media (max-width: 480px) {
+  .wifi-page {
+    padding: 5px;
+  }
+  
+  /* Smaller text on very small screens */
+  .wifi-page .ui.header {
+    font-size: 1.2rem !important;
+  }
+  
+  .wifi-page .ui.header .sub.header {
+    font-size: 0.9rem !important;
+  }
+}
+
+/* Loading state styling */
+.wifi-form-card.loading {
+  opacity: 0.7;
+}
+
+/* Status message styling */
+.ui.message {
+  margin-bottom: 15px !important;
+}
+
+/* Form field spacing */
+.ui.form .field {
+  margin-bottom: 1rem;
+}
+
+/* Card header spacing */
+.ui.card > .content > .header {
+  margin-bottom: 0.5rem;
+}

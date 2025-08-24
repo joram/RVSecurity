@@ -2,6 +2,9 @@
 import threading
 import uvicorn
 import os
+import subprocess
+import tempfile
+import sys
 #import alarm
 #import MQTTClient
 import rvglue
@@ -33,7 +36,7 @@ app.add_middleware(
 
 @app.get("/")
 @app.get("/power")
-@app.get("/contact")
+@app.get("/wifi")
 async def index():
     return Response(index_content)
 
@@ -43,6 +46,21 @@ interior_alarm_state = False
 class AlarmPostData(BaseModel):
     alarm: str
     state: bool
+
+class WiFiConfigData(BaseModel):
+    ssid: str
+    password: str
+    permanent: bool = False
+
+class WiFiConfigData(BaseModel):
+    ssid: str
+    password: str
+    permanent: bool = False
+
+class WiFiConfigResponse(BaseModel):
+    exit_code: int
+    output: str
+    success: bool
 
 @app.post("/api/alarmpost")
 async def alarm(data: Annotated[AlarmPostData, Body()]) -> dict:
@@ -60,6 +78,127 @@ async def alarm(data: Annotated[AlarmPostData, Body()]) -> dict:
 async def alarms() -> dict:
     global bike_alarm_state, interior_alarm_state
     return {"bike": bike_alarm_state, "interior": interior_alarm_state}
+
+@app.post("/api/wifi-config")
+async def wifi_config(data: Annotated[WiFiConfigData, Body()]) -> dict:
+    """
+    Configure WiFi on RP2W device by calling the RP5toRPZero2WControl.py script
+    """
+    try:
+        # Path to the WiFi control script - adjust this path as needed
+        script_path = "/home/tblank/code/tblank1024/WifitoHostBridge/RP5toRPZero2WControl.py"
+        
+        # Prepare the command arguments
+        cmd_args = [sys.executable, script_path, data.ssid, data.password]
+        
+        # If permanent storage is requested, add a profile name
+        if data.permanent:
+            profile_name = f"Profile_{data.ssid}"
+            cmd_args.append(profile_name)
+        
+        # Execute the WiFi configuration script
+        result = subprocess.run(
+            cmd_args,
+            capture_output=True,
+            text=True,
+            timeout=30  # 30 second timeout
+        )
+        
+        # Capture the output
+        output = result.stdout
+        if result.stderr:
+            output += f"\nError output: {result.stderr}"
+        
+        return {
+            "exit_code": result.returncode,
+            "output": output,
+            "command": " ".join(cmd_args[:-2] + ["<ssid>", "<password>"] + cmd_args[-1:] if len(cmd_args) > 4 else ["<ssid>", "<password>"])
+        }
+        
+    except subprocess.TimeoutExpired:
+        return {
+            "exit_code": 1,
+            "output": "Error: WiFi configuration timed out after 30 seconds",
+            "command": "timeout"
+        }
+    except FileNotFoundError:
+        return {
+            "exit_code": 1,
+            "output": f"Error: WiFi configuration script not found at {script_path}",
+            "command": "not_found"
+        }
+    except Exception as e:
+        return {
+            "exit_code": 1,
+            "output": f"Error: Unexpected error occurred: {str(e)}",
+            "command": "error"
+        }
+
+@app.post("/api/wifi-config")
+async def wifi_config(data: Annotated[WiFiConfigData, Body()]) -> WiFiConfigResponse:
+    """
+    Configure WiFi settings on RP2W device using the RP5toRPZero2WControl.py script
+    """
+    try:
+        # Path to the WiFi control script - adjust this path as needed
+        script_path = "/home/tblank/code/tblank1024/WifitoHostBridge/RP5toRPZero2WControl.py"
+        
+        # Check if script exists
+        if not os.path.exists(script_path):
+            return WiFiConfigResponse(
+                exit_code=1,
+                output=f"WiFi control script not found at {script_path}",
+                success=False
+            )
+        
+        # Prepare command arguments
+        cmd = [sys.executable, script_path, data.ssid, data.password]
+        
+        # Add profile name if permanent storage is requested
+        if data.permanent:
+            profile_name = f"RV_{data.ssid.replace(' ', '_')}"
+            cmd.append(profile_name)
+        
+        # Execute the WiFi configuration script
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30  # 30 second timeout
+        )
+        
+        # Determine success based on exit code
+        success = result.returncode == 0
+        
+        # Combine stdout and stderr for output
+        output_lines = []
+        if result.stdout:
+            output_lines.append("STDOUT:")
+            output_lines.append(result.stdout)
+        if result.stderr:
+            output_lines.append("STDERR:")
+            output_lines.append(result.stderr)
+        
+        output = "\n".join(output_lines) if output_lines else "No output received"
+        
+        return WiFiConfigResponse(
+            exit_code=result.returncode,
+            output=output,
+            success=success
+        )
+        
+    except subprocess.TimeoutExpired:
+        return WiFiConfigResponse(
+            exit_code=1,
+            output="WiFi configuration timed out after 30 seconds",
+            success=False
+        )
+    except Exception as e:
+        return WiFiConfigResponse(
+            exit_code=1,
+            output=f"Error executing WiFi configuration: {str(e)}",
+            success=False
+        )
 
 class DataResponse(BaseModel):
     var1: str

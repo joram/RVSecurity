@@ -3,7 +3,8 @@ import BatteryGauge from "react-battery-gauge";
 import HomePage from './HomePage.svg';
 import SVGDiagram from "../page-power/SVGDiagram";
 import { fetchFromServer } from '../utils/api';
-import Gauge from '../components/gauge1'
+import Gauge from '../components/gauge1';
+import './Home.css';
 
 
 
