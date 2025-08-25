@@ -13,12 +13,7 @@ code {
     monospace;
 }
 
-#battery {
-  position: absolute;
-  left: 60px;
-  top: 120px;
-}
-
+/* Global gauge styles - positioning should be in page-specific CSS files */
 .gauge_label {
   width: 100%;
   text-align: center;
@@ -26,33 +21,18 @@ code {
   font-weight: bold;
 }
 
-#first_gauge {
-  position: absolute;
-  left: 25px;
-  top: 230px;
-}
-
-#first_gauge .gauge_label {
+/* Global gauge label colors */
+.gauge_label {
   margin-top: 10px;
   color:  rgb(0,0,0);
 }
 
+/* Global gauge borders and styling */
 div.gauge#fresh {
   border-radius: 60px;
   border: 5px solid  rgb(0,0,0);
   padding: 15px;
 } 
-
-#second_gauge {
-  position: absolute;
-  left: 275px;
-  top: 230px;
-}
-
-#second_gauge .gauge_label {
-  margin-top: 10px;
-  color:  rgb(0,0,0); 
-}
 
 div.gauge#propane {
   border-radius: 60px;
@@ -60,33 +40,11 @@ div.gauge#propane {
   padding: 15px;
 } 
 
-#third_gauge {
-  position: absolute;
-  left: 25px;
-  top: 480px;
-}
-
-#third_gauge .gauge_label {
-  margin-top: 10px;
-  color:  rgb(0,0,0);
-}
-
 div.gauge#gray {
   border-radius: 60px;
   border: 5px solid rgb(0,0,0);
   padding: 15px;
 } 
-
-#fourth_gauge {
-  position: absolute;
-  left: 275px;
-  top: 480px;
-}
-
-#fourth_gauge .gauge_label {
-  margin-top: 10px;
-  color:  rgb(0,0,0); 
-}
 
 div.gauge#black {
   border-radius: 60px;
