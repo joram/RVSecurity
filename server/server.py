@@ -258,7 +258,7 @@ async def data()-> DataResponse:
         var14=AltPwrFlow,                                               #Alternator power Flow
         #battery variables begin
         var15= Batt_Hours_Remaining_str,
-        var16= 'Battery Status: ' + Batt_status_str,
+        var16= 'Status: ' + Batt_status_str,
         var17= GeneratorPwrFlow,
         var18= BatteryFlow,                        #Battery power Flow
         var19= str('%.0f' % Batt_Power) + " Watts",
