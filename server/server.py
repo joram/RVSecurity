@@ -65,7 +65,8 @@ class WiFiConfigResponse(BaseModel):
 @app.post("/api/alarmpost")
 async def alarm(data: Annotated[AlarmPostData, Body()]) -> dict:
     global bike_alarm_state, interior_alarm_state
-    print(f"Alarm: {data.alarm} State: {data.state}")
+    if debug > 0:
+        print(f"Alarm: {data.alarm} State: {data.state}")
     if data.alarm == "bike":
         bike_alarm_state = data.state
     elif data.alarm == "interior":
@@ -231,7 +232,7 @@ async def data()-> DataResponse:
     (Charger_AC_power, Charger_AC_voltage, Invert_AC_power, DC_Charger_power, DC_Charger_volts, Invert_DC_power, Invert_status_num)= InvertCalcs()
     (ShorePower, GenPower)= ATS_Calcs()
     (SolarPower) = SolcarCalcs()
-    (Batt_Power, Batt_Voltage, Batt_Charge, Batt_Hours_Remaining_str, Batt_status_str) = BatteryCalcs()
+    (Batt_Power, Batt_Voltage, Batt_Charge, Batt_Hours_Remaining_str, Batt_status_str) = BatteryCalcs(debug)
     (AlternatorPower) = AlternatorCalcs(Batt_Power, Invert_status_num, Invert_DC_power, SolarPower)
 
     (BatteryFlow, InvertPwrFlow, ShorePwrFlow, GeneratorPwrFlow, SolarPwrFlow, AltPwrFlow, Invert_status_str) = \
@@ -275,7 +276,7 @@ async def data()-> DataResponse:
     (Charger_AC_power, Charger_AC_voltage, Invert_AC_power, DC_Charger_power, DC_Charger_volts, Invert_DC_power, Invert_status_num)= InvertCalcs()
     (ShorePower, GenPower)= ATS_Calcs()
     (SolarPower) = SolcarCalcs()
-    (Batt_Power, Batt_Voltage, Batt_Charge, Batt_Hours_Remaining_str, Batt_status_str) = BatteryCalcs()
+    (Batt_Power, Batt_Voltage, Batt_Charge, Batt_Hours_Remaining_str, Batt_status_str) = BatteryCalcs(debug)
     (AlternatorPower) = AlternatorCalcs(Batt_Power, Invert_status_num, Invert_DC_power, SolarPower)
 
     #Calc AC and DC Loads since not measured
@@ -287,7 +288,8 @@ async def data()-> DataResponse:
     Tank_Gray = round(rvglue.rvglue.AliasData["_var35Tank_Level"]/rvglue.rvglue.AliasData["_var36Tank_Resolution"] * 100)   
     Tank_Propane = round(rvglue.rvglue.AliasData["_var38Tank_Level"]/rvglue.rvglue.AliasData["_var39Tank_Resolution"] * 100)  
 
-    print('invert power= ', round(Invert_AC_power), round(Invert_DC_power*.8))
+    if debug > 0:
+        print('invert power= ', round(Invert_AC_power), round(Invert_DC_power*.8))
 
     return DataResponse(
         var1 = 'Outside 60? psi',   # LR outside
@@ -305,7 +307,7 @@ async def data()-> DataResponse:
         var13= Tank_Gray,
         var14= Tank_Black,
         var15= Batt_Hours_Remaining_str,
-        var16= 'Battery Status: ' + Batt_status_str,
+        var16= 'Status: ' + Batt_status_str,
         var17= Tank_Fresh,
         var18= Tank_Propane,
         var19= str('%.0f' % Batt_Power) + " Watts",
@@ -327,7 +329,7 @@ if os.path.exists("build") and os.path.isdir("build"):
 if __name__ == "__main__":
     #kick off threads here  
     # MQTTClient("pub","localhost", 1883, "dgn_variables.json",'_var', 'RVC', debug) 
-    debug = 1
+    debug = 0
     client = MQTTClient("sub","localhost", 1883, '_var', 'RVC', debug)
     t1 = threading.Thread(target=client.run_mqtt_infinite)
     #t1 = threading.Thread(target=MQTTClient.MQTTClient().printhello)
@@ -341,5 +343,4 @@ if __name__ == "__main__":
     print(constants["IPADDR"], constants["PORT"])
     
 
-    uvicorn.run(app, host="0.0.0.0", port=int(constants["PORT"]))
-    
+    uvicorn.run(app, host="0.0.0.0", port=int(constants["PORT"]), log_level="warning")

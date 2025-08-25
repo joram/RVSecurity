@@ -100,7 +100,7 @@ def GenAllFlows(Invert_status_num, BatteryPower, SolarPower, ShorePower, GenPowe
 
     return(BatteryFlow, InvertPwrFlow, ShorePwrFlow, GeneratorPwrFlow, SolarPwrFlow, AltPwrFlow, Invert_status_str)
 
-def BatteryCalcs():
+def BatteryCalcs(debug):
     global Batt_Power_Last, Batt_Power_Running_Avg, Batt_Power_Remaining, BATT_POWER_MAX
 
     #Assumptions: 
@@ -148,7 +148,8 @@ def BatteryCalcs():
               
     
     
-    print(Batt_Voltage, Batt_Current, Batt_Charge, Batt_Power_Running_Avg, Batt_Power_Remaining, '   ' + Batt_Hours_Remaining_str)
+    if debug > 0:
+        print(Batt_Voltage, Batt_Current, Batt_Charge, Batt_Power_Running_Avg, Batt_Power_Remaining, '   ' + Batt_Hours_Remaining_str)
 
     return(Batt_Power, Batt_Voltage, Batt_Charge, Batt_Hours_Remaining_str, Batt_status_str)
 

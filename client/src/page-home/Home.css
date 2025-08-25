@@ -15,14 +15,25 @@
   transform: translateX(-50%);
 }
 
-/* Force black text color for all SVG text elements */
-.base_svg svg text {
+/* Force specific text elements to be black in Home page */
+.Home .base_svg svg text {
   fill: black !important;
   color: black !important;
 }
 
-.base_svg svg * {
+.Home .base_svg svg * {
   color: black !important;
+}
+
+/* Override color scheme for Home page */
+.Home .base_svg svg {
+  color-scheme: light !important;
+}
+
+/* Exception: Keep battery percentage white - target battery gauge text */
+.Home #battery text {
+  fill: white !important;
+  color: white !important;
 }
 
 /* Gauge positioning for Home page - Common properties only */
@@ -124,14 +135,25 @@
     max-width: none !important;
   }
   
-  /* Force black text color for all SVG text elements on mobile */
-  .base_svg svg text {
+  /* Force specific text elements to be black in Home page on mobile */
+  .Home .base_svg svg text {
     fill: black !important;
     color: black !important;
   }
 
-  .base_svg svg * {
+  .Home .base_svg svg * {
     color: black !important;
+  }
+
+  /* Override color scheme for Home page on mobile */
+  .Home .base_svg svg {
+    color-scheme: light !important;
+  }
+
+  /* Exception: Keep battery percentage white on mobile */
+  .Home #battery text {
+    fill: white !important;
+    color: white !important;
   }
   
   /* Battery positioning for mobile */
