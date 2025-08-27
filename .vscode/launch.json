@@ -19,15 +19,16 @@
         },
         {
             "name": "Python: Watcher Debug",
-            "cwd": "${fileDirname}",
             "type": "debugpy",
             "request": "launch",
             "program": "/home/tblank/code/tblank1024/rv/watcher/watcher.py",
             "args": [
-                "--debug", "0",
+                "--debug", "1",
                 "--Mode", "s"
             ],
             "console": "integratedTerminal",
+            "python": "/home/tblank/code/tblank1024/rv/watcher/venv/bin/python",
+            "cwd": "/home/tblank/code/tblank1024/rv/watcher",
             "justMyCode": true
         }
     ]
