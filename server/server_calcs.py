@@ -10,6 +10,25 @@ import datetime
 # Create an alias for easier access
 AliasData = rvglue.rvglue.AliasData
 
+# Utility functions for safe data conversion
+def safe_float(value, default=0.0):
+    """Safely convert a value to float, handling 'n/a' and other invalid values"""
+    try:
+        if isinstance(value, str) and value.lower() in ['n/a', 'na', '', 'none']:
+            return default
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+def safe_int(value, default=0):
+    """Safely convert a value to int, handling 'n/a' and other invalid values"""
+    try:
+        if isinstance(value, str) and value.lower() in ['n/a', 'na', '', 'none']:
+            return default
+        return int(float(value))  # Convert through float first to handle decimal strings
+    except (ValueError, TypeError):
+        return default
+
 
 try:
     fp = open("./constants.json", "rt")
@@ -54,7 +73,10 @@ def FlowMotion():
 
 def GenAllFlows(Invert_status_num, BatteryPower, SolarPower, ShorePower, GenPower, AltPower):
     
-    Invert_status_str = AliasData["_var15Invert_status_name"]                                  #Invertor string meaning"
+    try:
+        Invert_status_str = AliasData.get("_var15Invert_status_name", "Unknown")                                  #Invertor string meaning"
+    except:
+        Invert_status_str = "Unknown"
 
     RightMotion, LeftMotion = FlowMotion()  
     if BatteryPower == 0:
@@ -110,9 +132,9 @@ def BatteryCalcs(debug):
     #   12V battery system => 12V * 250 Amp-Hr = 3000 Watt-Hr battery capacity
 
     try:
-        Batt_Charge = float(AliasData["_var20Batt_charge"])                                    #Battery % charged"
-        Batt_Current = int(AliasData["_var19Batt_current"])                                  #Battery current
-        Batt_Voltage = float(AliasData["_var18Batt_voltage"])                                #Battery voltage"  TODO which DC voltage to use???
+        Batt_Charge = safe_float(AliasData.get("_var20Batt_charge", 10))                                    #Battery % charged"
+        Batt_Current = safe_int(AliasData.get("_var19Batt_current", 0))                                  #Battery current
+        Batt_Voltage = safe_float(AliasData.get("_var18Batt_voltage", 12.5))                                #Battery voltage"  TODO which DC voltage to use???
     except:
         #default values
         Batt_Voltage = 12.5 
@@ -154,9 +176,15 @@ def BatteryCalcs(debug):
     return(Batt_Power, Batt_Voltage, Batt_Charge, Batt_Hours_Remaining_str, Batt_status_str)
 
 def InvertCalcs():
+    INVERT_STANDBY_PWR = 26  #Watts - measured power used by inverter when on but no load
     global Invert_AC_power_prev
     #Inverter Power Calculations
-    Invert_status_num = AliasData["_var16Invert_status_num"]                                   #DC Invertor numerical state"
+    
+    try:
+        Invert_status_num = AliasData["_var16Invert_status_num"]                                   #DC Invertor numerical state"
+    except:
+        Invert_status_num = 0  # Default to disabled
+        
     """note: Invert_status_num meaning = 
         0 - Disabled
         1 - Invert
@@ -167,24 +195,26 @@ def InvertCalcs():
         6. Generator support
     """
     #Charger AC input (unidirectional input into charger/invertor. Power either from Gen or Shore )
-    Charger_AC_current =float(AliasData["_var02Charger_AC_current"])                                #AC charger RMS current" 
-    Charger_AC_voltage =float(AliasData["_var03Charger_AC_voltage"])                                #AC charger RMS voltage" 
-    Charger_AC_power = Charger_AC_voltage * Charger_AC_current                                                     #AC charger power 
+    Charger_AC_current = safe_float(AliasData.get("_var02Charger_AC_current", 0))                                #AC charger RMS current" 
+    Charger_AC_voltage = safe_float(AliasData.get("_var03Charger_AC_voltage", 0))                                #AC charger RMS voltage" 
+    Charger_AC_power = Charger_AC_voltage * Charger_AC_current 
+                                                        #AC charger power 
     #Charger DC output side from AC Charger. Power either from Gen or Shore
-    DC_Charger_current=(AliasData["_var04Charger_current"])                                   #DC charger  current"  
-    DC_Charger_volts=float(AliasData["_var05Charger_voltage"])                                #DC charger  voltage" 
-    DC_Charger_power = DC_Charger_volts * DC_Charger_current                                                     #DC charger power
+    DC_Charger_current = safe_float(AliasData.get("_var04Charger_current", 0))                                   #DC charger  current"  
+    DC_Charger_volts = safe_float(AliasData.get("_var05Charger_voltage", 0))                                #DC charger  voltage" 
+    DC_Charger_power = DC_Charger_volts * DC_Charger_current 
+                                                    #DC charger power
     #Inverter AC output (Drives AC Coach only; power either from DC sdie or Shore/Gen) 
-    Invert_AC_voltage=float(AliasData["_var10Invert_AC_voltage"])                             #AC invertor RMS voltage" 
-    Invert_AC_current=float(AliasData["_var09Invert_AC_current"])                                #AC invertor RMS current"
-    Invert_AC_power=Invert_AC_voltage *Invert_AC_current                                                      #AC invertor power
-
+    Invert_AC_voltage = safe_float(AliasData.get("_var10Invert_AC_voltage", 0))                             #AC invertor RMS voltage" 
+    Invert_AC_current = safe_float(AliasData.get("_var09Invert_AC_current", 0))                                #AC invertor RMS current"
+    Invert_AC_power = Invert_AC_voltage * Invert_AC_current                                                      #AC invertor power
     
     #DC Invertor input (Only operates if no Shore/Gen power. Power from DC side only)
     #Don't care much about the DC side.  Only necessary for inverter efficiency calculations
-    Invert_DC_Amp=float(AliasData["_var13Invert_DC_Amp"])                               #DC Invertor current"
-    Invert_DC_power = AliasData["_var14Invert_DC_Volt"] * Invert_DC_Amp                 #DC Invertor power
-    
+    Invert_DC_Amp = safe_float(AliasData.get("_var13Invert_DC_Amp", 0))                               #DC Invertor current"
+    Invert_DC_Volt = safe_float(AliasData.get("_var14Invert_DC_Volt", 0))                            #DC Invertor voltage"
+    Invert_DC_power = Invert_DC_Volt * Invert_DC_Amp                #DC Invertor power
+
     #heuristics to compinsate for very lower power values and poor A/D resolution
     if Invert_status_num == 1:
         #Invertor is on
@@ -193,7 +223,7 @@ def InvertCalcs():
     elif Invert_status_num == 2:
         #AC passthru
         if Invert_AC_power < 10:
-            Invert_AC_power = Charger_AC_power - 1.2* DC_Charger_power  #20% is efficiency estimate of charger
+            Invert_AC_power = Charger_AC_power - 1.2 * DC_Charger_power  #20% is efficiency estimate of charger
     else:
         #shouldn't get  here
         print('Error: Invertor status = ', Invert_status_num)
@@ -205,6 +235,8 @@ def InvertCalcs():
     return(Charger_AC_power, Charger_AC_voltage, Invert_AC_power, DC_Charger_power, DC_Charger_volts, Invert_DC_power, Invert_status_num)
 
 def ATS_Calcs():
+    # ATS == Automatic Transfer Switch
+
     # try:
     #     ATS_Power = AliasData["_var23ATS_AC_voltage"] * AliasData["_var22ATS_AC_current"] 
     #     ATS_Line = AliasData["_var21ATS_Line"]
@@ -220,8 +252,8 @@ def ATS_Calcs():
     #     GenPower = ATS_Power  
     
     #huerestic until better info available; assumes airconditioner is NOT on TODO
-    Charger_AC_current =float(AliasData["_var02Charger_AC_current"])                                #AC charger RMS current" 
-    Charger_AC_voltage =float(AliasData["_var03Charger_AC_voltage"])                                #AC charger RMS voltage" 
+    Charger_AC_current = safe_float(AliasData.get("_var02Charger_AC_current", 0))                                #AC charger RMS current" 
+    Charger_AC_voltage = safe_float(AliasData.get("_var03Charger_AC_voltage", 0))                                #AC charger RMS voltage" 
     ShorePower = round(Charger_AC_voltage * Charger_AC_current  )
     GenPower = 0
 
@@ -229,14 +261,18 @@ def ATS_Calcs():
     return(ShorePower, GenPower)  
 
 def SolcarCalcs():
-    # try:
-    #     SolarPower = (AliasData["_var26Solar_voltage"] * AliasData["_var27Solar_current"])                                #Solar power"
-    # except:
-    #     SolarPower = 0
 
-    #don't know this value so set to zero  TODO
-    SolarPower = 0
-    return(SolarPower)
+    #Solar power calculations
+    SolarVBatt = safe_float(AliasData.get("_var40Solar_VBatt", 0), 0) 
+    SolarIBatt = safe_float(AliasData.get("_var41Solar_IBatt", 0), 0)
+    SolarPower = SolarVBatt * SolarIBatt
+    print('Solar Battery V,I,P = ', SolarVBatt, SolarIBatt, SolarPower)
+
+    #only provide reasonable values 
+    if SolarPower < 0:
+        SolarPower = 0
+        #print('Error: Solar power < 0')
+    return(round(SolarPower))
 
 def AlternatorCalcs(Batt_Power, Invert_status_num, InvertorDCPower, SolarPower):
     #Note: Alternator power not measured so using estimate 
@@ -307,19 +343,33 @@ def LoadCalcs(Invert_status_num, Charger_AC_power, DC_Charger_power, ShorePower,
 
 def HouseKeeping():
     #House Keeping Messages
-    RedLamp = str(AliasData["_var07Red"])
+    try:
+        RedLamp = str(AliasData.get("_var07Red", "00"))
+    except:
+        RedLamp = "00"
+        
     if RedLamp == '00':
         RedMsg = ''
     else:
         RedMsg = RedLamp + ' Red Lamp Fault'
-    YellowLamp =str(AliasData["_var08Yellow"]) + " Yellow Lamp" 
+        
+    try:
+        YellowLamp = str(AliasData.get("_var08Yellow", "00")) + " Yellow Lamp"
+    except:
+        YellowLamp = "00 Yellow Lamp"
     YellowMsg = ''
     
     #TODO replace time with wall clock time
     local_timezone = get_localzone()
-    timestamp = float(AliasData["_var01Timestamp"])
-    datetime_obj = datetime.datetime.fromtimestamp(timestamp, tz=local_timezone)
-    Time_Str = datetime_obj.strftime("%Y-%m-%d %I:%M:%S %p")
+    try:
+        timestamp = safe_float(AliasData.get("_var01Timestamp", time.time()))
+        datetime_obj = datetime.datetime.fromtimestamp(timestamp, tz=local_timezone)
+        Time_Str = datetime_obj.strftime("%Y-%m-%d %I:%M:%S %p")
+    except:
+        # Fallback to current time if timestamp is invalid
+        datetime_obj = datetime.datetime.now(tz=local_timezone)
+        Time_Str = datetime_obj.strftime("%Y-%m-%d %I:%M:%S %p")
+        
     return(RedMsg, YellowMsg, Time_Str)
 
 if __name__ == "__main__":
