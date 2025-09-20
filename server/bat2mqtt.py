@@ -15,7 +15,6 @@ from typing import Optional
 
 import paho.mqtt.client as mqtt
 from bleak import BleakClient, BleakScanner
-from bleak.backends.device import BLEDevice
 
 
 class BatteryMQTTBridge:
@@ -101,7 +100,7 @@ class BatteryMQTTBridge:
             print(f"Error publishing to MQTT: {e}")
             return False
             
-    async def _find_battery_device(self) -> Optional[BLEDevice]:
+    async def _find_battery_device(self) -> Optional[object]:
         """Find and return the BLE battery device"""
         if self.debug > 0:
             print("Scanning for BLE devices...")
