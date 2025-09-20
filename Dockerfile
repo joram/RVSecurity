@@ -33,6 +33,7 @@ COPY --from=constants /app/server/constants.json server/.
 # Copy server files
 COPY server/server.py server/.
 COPY server/server_calcs.py server/.
+COPY server/bat2mqtt.py server/.
 #COPY server/mqttclient.py server/.
 #COPY server/dgn_variables.json server/.
 
