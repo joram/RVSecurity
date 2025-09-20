@@ -266,12 +266,12 @@ def SolcarCalcs():
     SolarVBatt = safe_float(AliasData.get("_var40Solar_VBatt", 0), 0) 
     SolarIBatt = safe_float(AliasData.get("_var41Solar_IBatt", 0), 0)
     SolarPower = SolarVBatt * SolarIBatt
-    print('Solar Battery V,I,P = ', SolarVBatt, SolarIBatt, SolarPower)
+    #print('Solar Battery V,I,P = ', SolarVBatt, SolarIBatt, SolarPower)
 
     #only provide reasonable values 
     if SolarPower < 0:
+        print('Error: Solar power < 0  ', SolarPower)
         SolarPower = 0
-        #print('Error: Solar power < 0')
     return(round(SolarPower))
 
 def AlternatorCalcs(Batt_Power, Invert_status_num, InvertorDCPower, SolarPower):
