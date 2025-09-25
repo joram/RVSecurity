@@ -32,7 +32,10 @@ export const fetchFromServer = async (endpoint, options = {}) => {
     }
   };
   
-  const response = await fetch(url, { ...defaultOptions, ...options });
+  // Merge options, preserving any signal that might be passed in
+  const fetchOptions = { ...defaultOptions, ...options };
+  
+  const response = await fetch(url, fetchOptions);
   
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);

@@ -29,7 +29,14 @@ class CoolGearUSBHub:
         self.TERMINATOR = "\r"
 
         # CORRECTED command strings based on systematic testing
-        self.PORT_ON_CMDS = { 1: "FFFFFFFF", 2: "FFFFFFFF", 3: "FFFFFFFF", 4: "FFFFFFFF" }
+        # Individual port ON commands (only one port on at a time)
+        self.PORT_ON_CMDS = { 
+            1: "01FFFFFF",  # Only port 1 on
+            2: "02FFFFFF",  # Only port 2 on
+            3: "04FFFFFF",  # Only port 3 on
+            4: "08FFFFFF"   # Only port 4 on
+        }
+        # Individual port OFF commands
         self.PORT_OFF_CMDS = { 1: "FEFFFFFF", 2: "FDFFFFFF", 3: "FBFFFFFF", 4: "F7FFFFFF" }
 
         self._connect()
@@ -322,4 +329,18 @@ class CoolGearUSBHub:
             return False
         status_string = self.PORT_OFF_CMDS.get(port_number, "EEEEEEEE")
         print(f"[INFO] Command: Port {port_number} OFF")
+        return self._send_command(status_string)
+    
+    def set_single_port_on(self, port_number):
+        """
+        Turn on only the specified port, ensuring all other ports are off.
+        This is an atomic operation that avoids brief multi-port states.
+        """
+        if not 1 <= port_number <= 4:
+            print("[ERROR] Port number must be between 1 and 4.")
+            return False
+        
+        # Use the individual PORT_ON_CMDS which already ensures only one port is on
+        status_string = self.PORT_ON_CMDS.get(port_number, "FFFFFFFF")
+        print(f"[INFO] Command: Set ONLY Port {port_number} ON (all others OFF)")
         return self._send_command(status_string)

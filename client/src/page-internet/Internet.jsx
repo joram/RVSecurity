@@ -10,6 +10,7 @@ const Internet = () => {
   const [connectionStatus, setConnectionStatus] = useState(null);
   const [statusMessage, setStatusMessage] = useState('');
   const [countdown, setCountdown] = useState(0);
+  const [abortController, setAbortController] = useState(null);
 
   // WiFi configuration states
   const [ssid, setSsid] = useState('');
@@ -38,16 +39,25 @@ const Internet = () => {
   }, [countdown]);
 
   const handleOptionChange = (e, { value }) => {
-    if (!isLoading && !isConnecting) {
-      setSelectedOption(value);
-      setConnectionStatus(null);
-      setStatusMessage('');
-      
-      // Automatically execute the selected action
-      setTimeout(() => {
-        executeAction(value);
-      }, 100); // Small delay to ensure UI updates
+    // Always allow changing the selection - this will interrupt any ongoing operations
+    setSelectedOption(value);
+    setConnectionStatus(null);
+    setStatusMessage('');
+    setCountdown(0);
+    
+    // Abort any ongoing operation
+    if (abortController) {
+      abortController.abort();
     }
+    
+    // Reset states
+    setIsLoading(false);
+    setIsConnecting(false);
+    
+    // Automatically execute the selected action
+    setTimeout(() => {
+      executeAction(value);
+    }, 100); // Small delay to ensure UI updates
   };
 
   const executeAction = async (selectedValue) => {
@@ -55,6 +65,10 @@ const Internet = () => {
 
     const option = internetOptions.find(opt => opt.value === selectedValue);
     if (!option) return;
+
+    // Create new AbortController for this operation
+    const newAbortController = new AbortController();
+    setAbortController(newAbortController);
 
     // Handle "None" option - just power off all ports
     if (selectedValue === 'none') {
@@ -69,8 +83,11 @@ const Internet = () => {
           body: JSON.stringify({
             port: 0, // 0 means all ports off
             action: 'off'
-          })
+          }),
+          signal: newAbortController.signal
         });
+
+        if (newAbortController.signal.aborted) return;
 
         if (response.success) {
           setConnectionStatus('info');
@@ -80,12 +97,14 @@ const Internet = () => {
         }
 
       } catch (error) {
+        if (newAbortController.signal.aborted) return;
         console.error('Power off error:', error);
         setConnectionStatus('error');
         setStatusMessage(`❌ Failed to power off connections: ${error.message}`);
       } finally {
         setIsLoading(false);
         setIsConnecting(false);
+        setAbortController(null);
       }
       return;
     }
@@ -105,18 +124,29 @@ const Internet = () => {
         body: JSON.stringify({
           port: option.port,
           action: 'on'
-        })
+        }),
+        signal: newAbortController.signal
       });
+
+      if (newAbortController.signal.aborted) return;
 
       if (!powerResponse.success) {
         throw new Error(powerResponse.message || 'Failed to power on port');
       }
 
-      // Step 2: Wait for the specified time with countdown
+      // Step 2: Wait for the specified time with countdown (but check for abort)
       setStatusMessage(`Waiting for ${option.text} to initialize...`);
       setCountdown(option.waitTime);
       
-      await new Promise(resolve => setTimeout(resolve, option.waitTime * 1000));
+      // Use a more granular wait that can be interrupted
+      for (let i = option.waitTime; i > 0; i--) {
+        if (newAbortController.signal.aborted) return;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        if (newAbortController.signal.aborted) return;
+        setCountdown(i - 1);
+      }
+
+      if (newAbortController.signal.aborted) return;
 
       // Step 3: Test internet connectivity
       setStatusMessage(`Testing internet connectivity...`);
@@ -126,8 +156,11 @@ const Internet = () => {
         method: 'POST',
         body: JSON.stringify({
           connection_type: selectedValue
-        })
+        }),
+        signal: newAbortController.signal
       });
+
+      if (newAbortController.signal.aborted) return;
 
       if (testResponse.success && testResponse.connected) {
         setConnectionStatus('success');
@@ -138,12 +171,14 @@ const Internet = () => {
       }
 
     } catch (error) {
+      if (newAbortController.signal.aborted) return;
       console.error('Connection error:', error);
       setConnectionStatus('error');
       setStatusMessage(`❌ Failed to connect via ${option.text}: ${error.message}`);
     } finally {
       setIsLoading(false);
       setIsConnecting(false);
+      setAbortController(null);
     }
   };
 
@@ -271,7 +306,7 @@ const Internet = () => {
                       value={option.value}
                       checked={selectedOption === option.value}
                       onChange={handleOptionChange}
-                      disabled={isLoading || isConnecting}
+                      disabled={false}  // Always allow changing selection
                     />
                   </Form.Field>
                 ))}

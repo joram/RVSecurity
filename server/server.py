@@ -213,6 +213,42 @@ USB_HUB_PORT_DELAY_BETWEEN_COMMANDS = 0.2  # Delay between individual port comma
 USB_HUB_PORT_DELAY_AFTER_ON = 1.0     # Delay after turning a port on (allow device to initialize)
 USB_HUB_PORT_DELAY_CONNECTION_SETTLE = 2.0  # Delay to allow connection to settle before testing
 
+# Connection-Type-Specific Initialization Delays (seconds)
+# These delays allow each internet connection type to properly initialize after power-on
+CONNECTION_INIT_DELAYS = {
+    'cellular': 5.0,    # Cellular modem initialization delay
+    'wifi': 10.0,       # WiFi adapter initialization delay  
+    'starlink': 20.0,   # Starlink terminal initialization delay
+    'wired': 3.0        # Wired ethernet adapter initialization delay
+}
+
+# Connection-Type-Specific Settling Delays for Testing (seconds)  
+# Additional time to wait before connectivity testing after initialization
+CONNECTION_SETTLE_DELAYS = {
+    'cellular': 8.0,    # Extra time for cellular network registration
+    'wifi': 5.0,        # Extra time for WiFi association and DHCP
+    'starlink': 15.0,   # Extra time for Starlink satellite acquisition
+    'wired': 2.0        # Minimal extra time for ethernet link negotiation
+}
+
+# Port to Connection Type Mapping
+# Maps USB hub port numbers to their corresponding connection types
+PORT_TO_CONNECTION_TYPE = {
+    1: 'cellular',
+    2: 'wifi', 
+    3: 'starlink',
+    4: 'wired'
+}
+
+def get_connection_init_delay(port_number):
+    """Get the initialization delay for a specific port/connection type."""
+    connection_type = PORT_TO_CONNECTION_TYPE.get(port_number, 'wired')
+    return CONNECTION_INIT_DELAYS.get(connection_type, USB_HUB_PORT_DELAY_AFTER_ON)
+
+def get_connection_settle_delay(connection_type):
+    """Get the settling delay for a specific connection type."""
+    return CONNECTION_SETTLE_DELAYS.get(connection_type, USB_HUB_PORT_DELAY_CONNECTION_SETTLE)
+
 class InternetPowerData(BaseModel):
     port: int  # 1-4 for specific ports, 0 for all ports off
     action: str  # 'on' or 'off'
@@ -348,22 +384,23 @@ async def internet_power_control(data: Annotated[InternetPowerData, Body()]) -> 
                 )
         
         elif 1 <= data.port <= 4:  # Specific port control
+            # Get connection type and appropriate delays for this port
+            connection_type = PORT_TO_CONNECTION_TYPE.get(data.port, 'wired')
+            init_delay = get_connection_init_delay(data.port)
+            
             if data.action.lower() == 'on':
-                # First turn off all other ports to ensure only one connection is active
-                print(f"Turning off all ports before enabling port {data.port}")
-                hub.all_off()
-                time.sleep(USB_HUB_PORT_DELAY_ALL_OFF)  # Wait for all ports to turn off
-                
-                print(f"Enabling port {data.port}")
-                result = hub.port_on(data.port)
+                # Use atomic single-port control to avoid multi-port transitions
+                print(f"Setting ONLY port {data.port} ON ({connection_type}) - all others OFF")
+                result = hub.set_single_port_on(data.port)
                 if result:
-                    time.sleep(USB_HUB_PORT_DELAY_AFTER_ON)  # Allow device to initialize
-                action_msg = "powered on"
+                    print(f"Applying {connection_type} initialization delay: {init_delay} seconds")
+                    time.sleep(init_delay)  # Use connection-specific initialization delay
+                action_msg = f"powered on ({connection_type})"
             else:
                 result = hub.port_off(data.port)
                 if result:
                     time.sleep(USB_HUB_PORT_DELAY_BETWEEN_COMMANDS)  # Brief pause
-                action_msg = "powered off"
+                action_msg = f"powered off ({connection_type})"
             
             if result:
                 return InternetResponse(
@@ -396,8 +433,10 @@ async def internet_power_control(data: Annotated[InternetPowerData, Body()]) -> 
 async def internet_connectivity_test(data: Annotated[InternetTestData, Body()]) -> InternetResponse:
     """Test internet connectivity for the specified connection type."""
     try:
-        # Allow time for connection to settle before testing
-        time.sleep(USB_HUB_PORT_DELAY_CONNECTION_SETTLE)
+        # Use connection-specific settling delay before testing
+        settle_delay = get_connection_settle_delay(data.connection_type)
+        print(f"Applying {data.connection_type} connection settle delay: {settle_delay} seconds")
+        time.sleep(settle_delay)
         
         # Test internet connectivity with extended timeout for connection types that may take longer
         timeout = 20 if data.connection_type in ['cellular', 'starlink'] else 15
