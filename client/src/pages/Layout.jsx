@@ -85,7 +85,8 @@ function Layout() {
       <Menu>
           <Menu.Item as={Link} to="/">Home</Menu.Item>
           <Menu.Item as={Link} to="/power">Power</Menu.Item>
-          <Menu.Item as={Link} to="/wifi">WiFi</Menu.Item>
+          <Menu.Item as={Link} to="/internet">Internet</Menu.Item>
+          <Menu.Item as={Link} to="/wifi">TV</Menu.Item>
           <Menu.Item as={TogglableButton} onClick={ToggleBikeAlarm} state={bikeAlarmState} text="Bike Alarm" activeColor="blue"></Menu.Item>
           <Menu.Item as={TogglableButton} onClick={ToggleInteriorAlarm} state={interiorAlarmState} text="Interior Alarm" activeColor="red"></Menu.Item>
       </Menu>

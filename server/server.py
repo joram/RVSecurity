@@ -5,6 +5,9 @@ import os
 import subprocess
 import tempfile
 import sys
+import time
+import socket
+import requests
 #import alarm
 #import MQTTClient
 import rvglue
@@ -37,6 +40,7 @@ app.add_middleware(
 @app.get("/")
 @app.get("/power")
 @app.get("/wifi")
+@app.get("/internet")
 async def index():
     return Response(index_content)
 
@@ -199,6 +203,217 @@ async def wifi_config(data: Annotated[WiFiConfigData, Body()]) -> WiFiConfigResp
             exit_code=1,
             output=f"Error executing WiFi configuration: {str(e)}",
             success=False
+        )
+
+# Internet Control Models and Endpoints
+
+# USB Hub Port Control Time Delay Constants (seconds)
+USB_HUB_PORT_DELAY_ALL_OFF = 0.5      # Delay after turning all ports off
+USB_HUB_PORT_DELAY_BETWEEN_COMMANDS = 0.2  # Delay between individual port commands
+USB_HUB_PORT_DELAY_AFTER_ON = 1.0     # Delay after turning a port on (allow device to initialize)
+USB_HUB_PORT_DELAY_CONNECTION_SETTLE = 2.0  # Delay to allow connection to settle before testing
+
+class InternetPowerData(BaseModel):
+    port: int  # 1-4 for specific ports, 0 for all ports off
+    action: str  # 'on' or 'off'
+
+class InternetTestData(BaseModel):
+    connection_type: str  # 'cellular', 'wifi', 'starlink', 'wired'
+
+class InternetResponse(BaseModel):
+    success: bool
+    message: str
+    port: int = None
+    connected: bool = None
+
+def get_usb_hub_controller():
+    """Get USB Hub Controller instance. Returns None if not available."""
+    try:
+        # Import the ASCII USB hub controller from the local directory
+        import sys
+        import os
+        
+        # Use the local usbhub_ascii.py module
+        local_path = os.path.dirname(os.path.abspath(__file__))
+        parent_path = os.path.dirname(local_path)  # Go up one directory to RVSecurity root
+        if parent_path not in sys.path:
+            sys.path.append(parent_path)
+        
+        from usbhub_ascii import CoolGearUSBHub
+        
+        # Try common USB device paths
+        possible_ports = ['/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyACM0', '/dev/ttyACM1']
+        
+        for port in possible_ports:
+            if os.path.exists(port):
+                try:
+                    hub = CoolGearUSBHub(port)
+                    if hub.ser and hub.ser.is_open:
+                        print(f"Successfully connected to USB hub on {port}")
+                        return hub
+                except Exception as e:
+                    print(f"Failed to connect to USB hub on {port}: {e}")
+                    continue
+        
+        print("No USB hub found on any of the standard ports")
+        return None
+        
+    except ImportError as e:
+        print(f"USB hub controller not available: {e}")
+        return None
+    except Exception as e:
+        print(f"Error initializing USB hub: {e}")
+        return None
+
+def test_internet_connectivity(connection_type="generic", timeout=10):
+    """Test internet connectivity using multiple methods."""
+    test_results = {
+        'dns_test': False,
+        'http_test': False,
+        'ping_test': False,
+        'connected': False,
+        'message': 'Testing...'
+    }
+    
+    try:
+        # Test 1: DNS resolution
+        try:
+            socket.getaddrinfo('google.com', 443, socket.AF_UNSPEC, socket.SOCK_STREAM)
+            test_results['dns_test'] = True
+        except (socket.gaierror, OSError):
+            pass
+        
+        # Test 2: HTTP request
+        try:
+            response = requests.get('http://google.com', timeout=timeout)
+            if response.status_code == 200 or 300 <= response.status_code < 400:
+                test_results['http_test'] = True
+        except requests.RequestException:
+            pass
+        
+        # Test 3: Ping test using subprocess
+        try:
+            result = subprocess.run(['ping', '-c', '3', '-W', str(timeout), '8.8.8.8'], 
+                                    capture_output=True, text=True, timeout=timeout+5)
+            if result.returncode == 0:
+                test_results['ping_test'] = True
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+        
+        # Determine overall connectivity
+        if test_results['dns_test'] and test_results['http_test']:
+            test_results['connected'] = True
+            test_results['message'] = f'Internet connectivity verified via {connection_type}'
+        elif test_results['ping_test']:
+            test_results['connected'] = True
+            test_results['message'] = f'Basic connectivity verified via {connection_type} (ping only)'
+        elif test_results['dns_test']:
+            test_results['connected'] = False
+            test_results['message'] = f'DNS works but HTTP failed via {connection_type}'
+        else:
+            test_results['connected'] = False
+            test_results['message'] = f'No internet connectivity detected via {connection_type}'
+            
+    except Exception as e:
+        test_results['message'] = f'Connectivity test failed: {str(e)}'
+    
+    return test_results
+
+@app.post("/api/internet/power")
+async def internet_power_control(data: Annotated[InternetPowerData, Body()]) -> InternetResponse:
+    """Control USB hub ports for internet connections."""
+    try:
+        hub = get_usb_hub_controller()
+        if not hub:
+            return InternetResponse(
+                success=False,
+                message="USB hub controller not available. Check USB hub connection.",
+                port=data.port
+            )
+        
+        if data.port == 0:  # All ports off
+            result = hub.all_off()
+            if result:
+                time.sleep(USB_HUB_PORT_DELAY_ALL_OFF)  # Allow time for all ports to turn off
+                return InternetResponse(
+                    success=True,
+                    message="All USB ports powered off",
+                    port=0
+                )
+            else:
+                return InternetResponse(
+                    success=False,
+                    message="Failed to power off all USB ports",
+                    port=0
+                )
+        
+        elif 1 <= data.port <= 4:  # Specific port control
+            if data.action.lower() == 'on':
+                # First turn off all other ports to ensure only one connection is active
+                print(f"Turning off all ports before enabling port {data.port}")
+                hub.all_off()
+                time.sleep(USB_HUB_PORT_DELAY_ALL_OFF)  # Wait for all ports to turn off
+                
+                print(f"Enabling port {data.port}")
+                result = hub.port_on(data.port)
+                if result:
+                    time.sleep(USB_HUB_PORT_DELAY_AFTER_ON)  # Allow device to initialize
+                action_msg = "powered on"
+            else:
+                result = hub.port_off(data.port)
+                if result:
+                    time.sleep(USB_HUB_PORT_DELAY_BETWEEN_COMMANDS)  # Brief pause
+                action_msg = "powered off"
+            
+            if result:
+                return InternetResponse(
+                    success=True,
+                    message=f"USB port {data.port} {action_msg} successfully",
+                    port=data.port
+                )
+            else:
+                return InternetResponse(
+                    success=False,
+                    message=f"Failed to {data.action} USB port {data.port}",
+                    port=data.port
+                )
+        
+        else:
+            return InternetResponse(
+                success=False,
+                message=f"Invalid port number: {data.port}. Use 1-4 for specific ports, 0 for all off.",
+                port=data.port
+            )
+    
+    except Exception as e:
+        return InternetResponse(
+            success=False,
+            message=f"USB hub control error: {str(e)}",
+            port=data.port
+        )
+
+@app.post("/api/internet/test")
+async def internet_connectivity_test(data: Annotated[InternetTestData, Body()]) -> InternetResponse:
+    """Test internet connectivity for the specified connection type."""
+    try:
+        # Allow time for connection to settle before testing
+        time.sleep(USB_HUB_PORT_DELAY_CONNECTION_SETTLE)
+        
+        # Test internet connectivity with extended timeout for connection types that may take longer
+        timeout = 20 if data.connection_type in ['cellular', 'starlink'] else 15
+        test_results = test_internet_connectivity(data.connection_type, timeout=timeout)
+        
+        return InternetResponse(
+            success=True,
+            message=test_results['message'],
+            connected=test_results['connected']
+        )
+    
+    except Exception as e:
+        return InternetResponse(
+            success=False,
+            message=f"Connectivity test failed: {str(e)}",
+            connected=False
         )
 
 class DataResponse(BaseModel):
