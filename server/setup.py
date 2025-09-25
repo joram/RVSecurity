@@ -10,6 +10,7 @@ packages = [
     "paho-mqtt==1.6.1",
     "tzlocal==5.0.1",
     "rvglue @ git+https://github.com/tblank1024/rvglue",
+    "bleak==0.21.1",  # BLE support for bat2mqtt.py
     #"aiofiles",
     #"aiohttp==3.8.3",
 ]
