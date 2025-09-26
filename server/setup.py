@@ -9,6 +9,7 @@ packages = [
     "requests==2.27.1",
     "paho-mqtt==1.6.1",
     "tzlocal==5.0.1",
+    "pyserial==3.5",  # Required for USB hub serial communication
     "rvglue @ git+https://github.com/tblank1024/rvglue",
     #"aiofiles",
     #"aiohttp==3.8.3",

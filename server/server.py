@@ -47,6 +47,9 @@ async def index():
 bike_alarm_state = False
 interior_alarm_state = False
 
+# Internet Connection State Management
+current_internet_connection = "none"  # Tracks current connection: "none", "cellular", "wifi", "starlink", "wired"
+
 class AlarmPostData(BaseModel):
     alarm: str
     state: bool
@@ -249,6 +252,57 @@ def get_connection_settle_delay(connection_type):
     """Get the settling delay for a specific connection type."""
     return CONNECTION_SETTLE_DELAYS.get(connection_type, USB_HUB_PORT_DELAY_CONNECTION_SETTLE)
 
+def detect_current_internet_connection():
+    """
+    Detect the current internet connection state by querying the USB hub.
+    Updates the global current_internet_connection variable.
+    Returns the detected connection type.
+    """
+    global current_internet_connection
+    
+    try:
+        hub = get_usb_hub_controller()
+        if not hub:
+            print("WARNING: Could not connect to USB hub for state detection")
+            current_internet_connection = "none"
+            return current_internet_connection
+        
+        # Get the currently active port
+        active_port = hub.get_current_active_port()
+        
+        if active_port == -1:
+            print("WARNING: Could not determine hub state")
+            current_internet_connection = "none"
+        elif active_port == 0:
+            print("INFO: No internet connection active (all ports off)")
+            current_internet_connection = "none"
+        elif 1 <= active_port <= 4:
+            # Map port to connection type
+            connection_type = PORT_TO_CONNECTION_TYPE.get(active_port, "none")
+            current_internet_connection = connection_type
+            print(f"INFO: Detected active internet connection: {connection_type} (port {active_port})")
+        else:
+            print(f"WARNING: Invalid active port detected: {active_port}")
+            current_internet_connection = "none"
+    
+    except Exception as e:
+        print(f"ERROR: Failed to detect internet connection state: {e}")
+        current_internet_connection = "none"
+    
+    return current_internet_connection
+
+def update_current_internet_connection(port, action):
+    """Update the current internet connection state based on port control actions."""
+    global current_internet_connection
+    
+    if port == 0 or action.lower() == 'off':
+        current_internet_connection = "none"
+    elif 1 <= port <= 4 and action.lower() == 'on':
+        connection_type = PORT_TO_CONNECTION_TYPE.get(port, "none")
+        current_internet_connection = connection_type
+    
+    print(f"INFO: Current internet connection updated to: {current_internet_connection}")
+
 class InternetPowerData(BaseModel):
     port: int  # 1-4 for specific ports, 0 for all ports off
     action: str  # 'on' or 'off'
@@ -355,6 +409,15 @@ def test_internet_connectivity(connection_type="generic", timeout=10):
     
     return test_results
 
+@app.get("/api/internet/status")
+async def get_internet_status() -> dict:
+    """Get the current internet connection status."""
+    global current_internet_connection
+    return {
+        "current_connection": current_internet_connection,
+        "available_connections": ["none", "cellular", "wifi", "starlink", "wired"]
+    }
+
 @app.post("/api/internet/power")
 async def internet_power_control(data: Annotated[InternetPowerData, Body()]) -> InternetResponse:
     """Control USB hub ports for internet connections."""
@@ -371,6 +434,7 @@ async def internet_power_control(data: Annotated[InternetPowerData, Body()]) -> 
             result = hub.all_off()
             if result:
                 time.sleep(USB_HUB_PORT_DELAY_ALL_OFF)  # Allow time for all ports to turn off
+                update_current_internet_connection(0, "off")  # Update state
                 return InternetResponse(
                     success=True,
                     message="All USB ports powered off",
@@ -403,6 +467,7 @@ async def internet_power_control(data: Annotated[InternetPowerData, Body()]) -> 
                 action_msg = f"powered off ({connection_type})"
             
             if result:
+                update_current_internet_connection(data.port, data.action)  # Update state
                 return InternetResponse(
                     success=True,
                     message=f"USB port {data.port} {action_msg} successfully",
@@ -588,6 +653,11 @@ if __name__ == "__main__":
     t1 = threading.Thread(target=client.run_mqtt_infinite)
     #t1 = threading.Thread(target=MQTTClient.MQTTClient().printhello)
     t1.start()
+
+    # Initialize internet connection state from USB hub
+    print("Detecting current internet connection state...")
+    detected_connection = detect_current_internet_connection()
+    print(f"Server startup: Current internet connection is '{detected_connection}'")
 
     # "0.0.0.0" => accept requests from any IP addr
     # default port is 8000.  Dockerfile sets port = 80 using environment variable

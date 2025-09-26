@@ -38,6 +38,24 @@ const Internet = () => {
     return () => clearInterval(interval);
   }, [countdown]);
 
+  // Fetch current internet connection status on component mount
+  useEffect(() => {
+    const fetchCurrentStatus = async () => {
+      try {
+        const response = await fetchFromServer('/api/internet/status');
+        if (response.current_connection) {
+          setSelectedOption(response.current_connection);
+          console.log('Loaded current internet connection:', response.current_connection);
+        }
+      } catch (error) {
+        console.error('Failed to fetch current internet status:', error);
+        // Keep default 'none' if fetch fails
+      }
+    };
+
+    fetchCurrentStatus();
+  }, []); // Empty dependency array means this runs once on mount
+
   const handleOptionChange = (e, { value }) => {
     // Always allow changing the selection - this will interrupt any ongoing operations
     setSelectedOption(value);

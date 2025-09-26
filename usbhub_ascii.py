@@ -24,6 +24,7 @@ class CoolGearUSBHub:
         self.baudrate = self.FIXED_BAUDRATE
         self.timeout = self.READ_TIMEOUT
         self.ser = None
+        self.last_active_port = None  # Track the last active port for proper switching delays
 
         self.BASE_COMMAND = "SPpass    "
         self.TERMINATOR = "\r"
@@ -38,6 +39,9 @@ class CoolGearUSBHub:
         }
         # Individual port OFF commands
         self.PORT_OFF_CMDS = { 1: "FEFFFFFF", 2: "FDFFFFFF", 3: "FBFFFFFF", 4: "F7FFFFFF" }
+
+        # Track last active port for 2-second delay between different ports
+        self.last_active_port = None
 
         self._connect()
         if self.ser and self.ser.is_open:
@@ -309,11 +313,68 @@ class CoolGearUSBHub:
     def all_off(self):
         print("[INFO] Command: All ports OFF")
         # Based on individual port patterns: FE & FD & FB & F7 = E0
-        return self._send_command("E0FFFFFF")
+        result = self._send_command("E0FFFFFF")
+        if result:
+            self.last_active_port = None  # Reset tracking when all ports are off
+        return result
 
     def reset_hub(self):
+        """Basic hub reset - turns all ports on."""
         print("[INFO] Command: Hub Reset (All ON)")
         return self.all_on()
+    
+    def full_hub_reset(self):
+        """
+        Comprehensive hub reset to restore ports 3 and 4 functionality.
+        This attempts to reset the hub state without physical power cycling.
+        """
+        print("[INFO] Performing full hub reset to restore port functionality...")
+        
+        try:
+            # Step 1: Clear any pending state
+            print("  Step 1: Clearing hub buffers...")
+            if self.ser:
+                self.ser.reset_input_buffer()
+                self.ser.reset_output_buffer()
+            time.sleep(0.5)
+            
+            # Step 2: Send all ports OFF
+            print("  Step 2: All ports OFF...")
+            result1 = self.all_off()
+            time.sleep(1.0)
+            
+            # Step 3: Send all ports ON (reset state)
+            print("  Step 3: All ports ON (reset state)...")
+            result2 = self.all_on()
+            time.sleep(1.0)
+            
+            # Step 4: All ports OFF again (clean state)
+            print("  Step 4: All ports OFF (clean state)...")
+            result3 = self.all_off()
+            time.sleep(1.0)
+            
+            # Step 5: Test each port individually to verify reset
+            print("  Step 5: Testing each port after reset...")
+            for port in [1, 2, 3, 4]:
+                print(f"    Testing port {port}...")
+                result = self.set_single_port_on(port)
+                time.sleep(0.5)
+                if not result:
+                    print(f"    WARNING: Port {port} test failed after reset")
+                else:
+                    print(f"    Port {port} OK")
+            
+            # Step 6: Return to all OFF state
+            print("  Step 6: Final cleanup - all ports OFF...")
+            result4 = self.all_off()
+            time.sleep(0.5)
+            
+            print("  Full hub reset complete!")
+            return result1 and result2 and result3 and result4
+            
+        except Exception as e:
+            print(f"  ERROR during full hub reset: {e}")
+            return False
 
     def port_on(self, port_number):
         if not 1 <= port_number <= 4:
@@ -335,12 +396,71 @@ class CoolGearUSBHub:
         """
         Turn on only the specified port, ensuring all other ports are off.
         This is an atomic operation that avoids brief multi-port states.
+        Includes 2-second delay when switching between different ports.
         """
         if not 1 <= port_number <= 4:
             print("[ERROR] Port number must be between 1 and 4.")
             return False
         
+        # Check if we need a delay (switching from different port)
+        if hasattr(self, 'last_active_port') and self.last_active_port != port_number and self.last_active_port != 0:
+            print(f"[INFO] Switching from port {self.last_active_port} to port {port_number}")
+            print("[INFO] Applying 2-second delay for proper power sequencing...")
+            time.sleep(2.0)  # 2-second delay between different port selections
+        
         # Use the individual PORT_ON_CMDS which already ensures only one port is on
         status_string = self.PORT_ON_CMDS.get(port_number, "FFFFFFFF")
         print(f"[INFO] Command: Set ONLY Port {port_number} ON (all others OFF)")
-        return self._send_command(status_string)
+        result = self._send_command(status_string)
+        
+        # Track the last active port
+        if result:
+            self.last_active_port = port_number
+        
+        return result
+    
+    def get_current_active_port(self):
+        """
+        Get the currently active USB hub port by querying hub status.
+        Returns: port number (1-4) if single port is active, 0 if all off, -1 if error/multiple ports
+        """
+        try:
+            # Send status query command
+            status_cmd = f"GP{self.TERMINATOR}"
+            response = self._execute_command(status_cmd)
+            
+            if not response:
+                print("[WARNING] No response from hub status query")
+                return -1
+            
+            # Parse the response (should be like "01FFFFFF", "02FFFFFF", etc.)
+            if len(response) >= 8:
+                status_hex = response[:8].upper()
+                print(f"[DEBUG] Hub status response: {status_hex}")
+                
+                # Map status responses to port numbers
+                status_to_port = {
+                    "01FFFFFF": 1,  # Only port 1 on
+                    "02FFFFFF": 2,  # Only port 2 on  
+                    "04FFFFFF": 3,  # Only port 3 on
+                    "08FFFFFF": 4,  # Only port 4 on
+                    "E0FFFFFF": 0,  # All ports off
+                    "FFFFFFFF": -1  # All ports on (shouldn't happen in normal operation)
+                }
+                
+                active_port = status_to_port.get(status_hex, -1)
+                if active_port >= 0:
+                    print(f"[INFO] Current active port: {active_port if active_port > 0 else 'None (all off)'}")
+                    # Update tracking
+                    self.last_active_port = active_port
+                    return active_port
+                else:
+                    print(f"[WARNING] Unrecognized hub status: {status_hex}")
+                    return -1
+            else:
+                print(f"[WARNING] Invalid hub status response length: {response}")
+                return -1
+                
+        except Exception as e:
+            print(f"[ERROR] Failed to get current active port: {e}")
+            return -1
