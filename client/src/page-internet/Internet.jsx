@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Form, Button, Message, Card, Header, Icon, Segment, Radio, TextArea, Checkbox } from 'semantic-ui-react';
 import './Internet.css';
 import { fetchFromServer } from '../utils/api';
 
 const Internet = () => {
   const [selectedOption, setSelectedOption] = useState('none');
-  const [isLoading, setIsLoading] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState(null);
   const [statusMessage, setStatusMessage] = useState('');
@@ -20,12 +19,17 @@ const Internet = () => {
   const [wifiLoading, setWifiLoading] = useState(false);
   const [lastResult, setLastResult] = useState(null);
 
+  // Power reading states
+  const [kasaPort1Power, setKasaPort1Power] = useState(0);
+  const [kasaPort6Power, setKasaPort6Power] = useState(0);
+
   const internetOptions = [
-    { value: 'cellular', text: 'Cellular', port: 1, waitTime: 15 },
-    { value: 'wifi', text: 'WiFi', port: 2, waitTime: 10 },
-    { value: 'starlink', text: 'Starlink', port: 3, waitTime: 20 },
-    { value: 'wired', text: 'Wired', port: 4, waitTime: 8 },
-    { value: 'none', text: 'None', port: 0, waitTime: 0 }
+    { value: 'cellular', text: 'Cellular', port: 1, waitTime: 15, kasaPort: null },
+    { value: 'cellular-amp', text: 'Cellular + Amp', port: 1, waitTime: 15, kasaPort: 1 },
+    { value: 'wifi', text: 'WiFi', port: 2, waitTime: 10, kasaPort: null },
+    { value: 'starlink', text: 'Starlink', port: 3, waitTime: 20, kasaPort: 6 },
+    { value: 'wired', text: 'Wired', port: 4, waitTime: 8, kasaPort: null },
+    { value: 'none', text: 'None', port: 0, waitTime: 0, kasaPort: null }
   ];
 
   useEffect(() => {
@@ -69,7 +73,6 @@ const Internet = () => {
     }
     
     // Reset states
-    setIsLoading(false);
     setIsConnecting(false);
     
     // Automatically execute the selected action
@@ -90,7 +93,6 @@ const Internet = () => {
 
     // Handle "None" option - just power off all ports
     if (selectedValue === 'none') {
-      setIsLoading(true);
       setIsConnecting(true);
       setConnectionStatus(null);
       setStatusMessage('Powering off all internet connections...');
@@ -100,7 +102,8 @@ const Internet = () => {
           method: 'POST',
           body: JSON.stringify({
             port: 0, // 0 means all ports off
-            action: 'off'
+            action: 'off',
+            kasaPort: null
           }),
           signal: newAbortController.signal
         });
@@ -120,7 +123,6 @@ const Internet = () => {
         setConnectionStatus('error');
         setStatusMessage(`❌ Failed to power off connections: ${error.message}`);
       } finally {
-        setIsLoading(false);
         setIsConnecting(false);
         setAbortController(null);
       }
@@ -128,7 +130,6 @@ const Internet = () => {
     }
 
     // Handle regular connection options
-    setIsLoading(true);
     setIsConnecting(true);
     setConnectionStatus(null);
     setStatusMessage(`Connecting to ${option.text}...`);
@@ -141,7 +142,8 @@ const Internet = () => {
         method: 'POST',
         body: JSON.stringify({
           port: option.port,
-          action: 'on'
+          action: 'on',
+          kasaPort: option.kasaPort
         }),
         signal: newAbortController.signal
       });
@@ -182,7 +184,7 @@ const Internet = () => {
 
       if (testResponse.success && testResponse.connected) {
         setConnectionStatus('success');
-        setStatusMessage(`✅ Internet connection established via ${option.text}!`);
+        setStatusMessage(`Connected - Internet Verified`);
       } else {
         setConnectionStatus('warning');
         setStatusMessage(`⚠️ ${option.text} powered on, but internet connectivity could not be verified. ${testResponse.message || ''}`);
@@ -194,7 +196,6 @@ const Internet = () => {
       setConnectionStatus('error');
       setStatusMessage(`❌ Failed to connect via ${option.text}: ${error.message}`);
     } finally {
-      setIsLoading(false);
       setIsConnecting(false);
       setAbortController(null);
     }
@@ -267,6 +268,100 @@ const Internet = () => {
     }
   };
 
+  // Function to fetch power readings from Kasa power strip
+  const fetchKasaPower = useCallback(async () => {
+    try {
+      // Fetch power from port 1 (cellular amp)
+      const port1Response = await fetchFromServer('/api/kasa/power/1');
+      if (port1Response.success) {
+        setKasaPort1Power(port1Response.power);
+      }
+
+      // Fetch power from port 6 (starlink)
+      const port6Response = await fetchFromServer('/api/kasa/power/6');
+      if (port6Response.success) {
+        setKasaPort6Power(port6Response.power);
+      }
+    } catch (error) {
+      console.error('Failed to fetch Kasa power readings:', error);
+    }
+  }, []);
+
+  // Fetch power readings on component mount and periodically
+  useEffect(() => {
+    fetchKasaPower();
+    
+    // Update power readings every 30 seconds
+    const powerInterval = setInterval(fetchKasaPower, 30000);
+    
+    return () => clearInterval(powerInterval);
+  }, [fetchKasaPower]);
+
+  // Function to get power consumption text for each option
+  const getPowerText = useCallback((option) => {
+    const isSelected = selectedOption === option.value;
+    
+    switch (option.value) {
+      case 'cellular':
+        return isSelected ? 'Actual: 4 Watts' : 'Est: 4 Watts';
+      case 'cellular-amp':
+        return isSelected ? `Actual: ${4 + kasaPort1Power} Watts` : 'Est: 54 Watts';
+      case 'wifi':
+        return isSelected ? 'Actual: 0.7 Watts' : 'Est: 0.7 Watts';
+      case 'starlink':
+        return isSelected ? `Actual: ${kasaPort6Power} Watts` : 'Est: 120 Watts';
+      case 'wired':
+        return isSelected ? 'Actual: 0.1 Watts' : 'Est: 0.1 Watts';
+      case 'none':
+        return isSelected ? 'Actual: 0 Watts' : 'Est: 0 Watts';
+      default:
+        return isSelected ? 'Actual: 0 Watts' : 'Est: 0 Watts';
+    }
+  }, [kasaPort1Power, kasaPort6Power, selectedOption]);
+
+  // Function to automatically test connectivity when status is "Not tested"
+  const autoTestConnectivity = useCallback(async () => {
+    if (selectedOption && selectedOption !== 'none' && connectionStatus === null) {
+      try {
+        setStatusMessage('Running automatic connectivity test...');
+        const testResponse = await fetchFromServer('/api/internet/test', {
+          method: 'POST',
+          body: JSON.stringify({
+            connection_type: selectedOption
+          })
+        });
+
+        if (testResponse.success) {
+          if (testResponse.connected) {
+            setConnectionStatus('success');
+            setStatusMessage('Connected \& Verified');
+          } else {
+            setConnectionStatus('warning');
+            setStatusMessage('⚠️ Port active but no internet connectivity detected');
+          }
+        } else {
+          setConnectionStatus('error');
+          setStatusMessage(`❌ Connectivity test failed: ${testResponse.message}`);
+        }
+      } catch (error) {
+        console.error('Auto connectivity test error:', error);
+        setConnectionStatus('error');
+        setStatusMessage(`❌ Auto test failed: ${error.message}`);
+      }
+    }
+  }, [selectedOption, connectionStatus]);
+
+  // Automatically test connectivity when status is "Not tested"
+  useEffect(() => {
+    if (selectedOption && selectedOption !== 'none' && connectionStatus === null && !isConnecting) {
+      const timer = setTimeout(() => {
+        autoTestConnectivity();
+      }, 2000); // Wait 2 seconds before auto-testing
+      
+      return () => clearTimeout(timer);
+    }
+  }, [selectedOption, connectionStatus, isConnecting, autoTestConnectivity]);
+
   const clearWifiOutput = () => {
     setOutput('');
     setLastResult(null);
@@ -300,15 +395,15 @@ const Internet = () => {
 
   return (
     <div className="internet-page">
-      <Header as="h1" icon textAlign="center">
-        <Icon name="wifi" />
-        <Header.Content>
-          Internet Connection Control
-          <Header.Subheader>Select and manage your internet connection method</Header.Subheader>
-        </Header.Content>
-      </Header>
-
       <div className="internet-container">
+        <Header as="h1" icon textAlign="center">
+          <Icon name="wifi" />
+          <Header.Content>
+            Internet Connection Control
+            <Header.Subheader>Select and manage your internet connection method</Header.Subheader>
+          </Header.Content>
+        </Header>
+
         <Card className="internet-control-card">
           <Card.Content>
             <Form>
@@ -317,9 +412,7 @@ const Internet = () => {
                 {internetOptions.map(option => (
                   <Form.Field key={option.value}>
                     <Radio
-                      label={option.value === 'none' ? 
-                        `${option.text} - Maximizes power saving` : 
-                        `${option.text} (Port ${option.port}) - ${option.waitTime}s initialization`}
+                      label={`${option.text} (${getPowerText(option)})`}
                       name="internetOption"
                       value={option.value}
                       checked={selectedOption === option.value}
@@ -330,179 +423,183 @@ const Internet = () => {
                 ))}
               </Form.Field>
             </Form>
-          </Card.Content>
-        </Card>
-
-        <Card className="internet-status-card">
-          <Card.Content>
-            <Card.Header>
-              Connection Status
-              {countdown > 0 && (
-                <span className="countdown-badge">
-                  {countdown}s
+            
+            {/* Internet Status at bottom of connection selection */}
+            <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #e0e0e0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <strong>Internet Status:</strong>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  {isConnecting ? (
+                    <>
+                      <Icon name="circle notched" loading />
+                      Initializing...
+                    </>
+                  ) : connectionStatus === 'success' ? (
+                    <>
+                      <Icon name="check circle" color="green" />
+                      Connected & Verified
+                    </>
+                  ) : connectionStatus === 'warning' ? (
+                    <>
+                      <Icon name="warning circle" color="yellow" />
+                      Port Active, Connectivity Unknown
+                    </>
+                  ) : connectionStatus === 'error' ? (
+                    <>
+                      <Icon name="times circle" color="red" />
+                      Failed
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="circle outline" />
+                      Not tested
+                    </>
+                  )}
+                  {countdown > 0 && (
+                    <span className="countdown-badge" style={{ marginLeft: '10px', padding: '2px 8px', backgroundColor: '#f0f0f0', borderRadius: '12px', fontSize: '0.8em' }}>
+                      {countdown}s
+                    </span>
+                  )}
                 </span>
-              )}
-            </Card.Header>
-          </Card.Content>
-          <Card.Content>
-            {/* Starlink Power Warning */}
-            {selectedOption === 'starlink' && (
-              <Message 
-                color="red"
-                icon="warning sign"
-                header="Important Notice"
-                content="Be sure Power is applied"
-                style={{ marginBottom: '15px' }}
-              />
-            )}
-
-            {statusMessage && (
-              <Message 
-                color={getStatusColor()}
-                icon={getStatusIcon()}
-                header={connectionStatus === 'success' ? 'Connected' : 
-                        connectionStatus === 'warning' ? 'Partial Success' : 
-                        connectionStatus === 'error' ? 'Connection Failed' : 
-                        connectionStatus === 'info' ? 'Information' : 'Status'}
-                content={statusMessage}
-              />
-            )}
-            
-            {/* WiFi Configuration Section */}
-            {selectedOption === 'wifi' && (
-              <div style={{ marginBottom: '20px' }}>
-                <Card className="wifi-config-card">
-                  <Card.Content>
-                    <Card.Header>WiFi Configuration</Card.Header>
-                    <Card.Description>
-                      Configure WiFi settings for RP2W device
-                    </Card.Description>
-                  </Card.Content>
-                  <Card.Content>
-                    <Form onSubmit={handleWifiSubmit}>
-                      <Form.Field required>
-                        <label>SSID (Network Name)</label>
-                        <Form.Input
-                          placeholder="Enter WiFi network name"
-                          value={ssid}
-                          onChange={(e) => setSsid(e.target.value)}
-                          disabled={wifiLoading}
-                          icon="wifi"
-                          iconPosition="left"
-                        />
-                      </Form.Field>
-                      
-                      <Form.Field required>
-                        <label>Password</label>
-                        <Form.Input
-                          type="password"
-                          placeholder="Enter WiFi password"
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          disabled={wifiLoading}
-                          icon="lock"
-                          iconPosition="left"
-                        />
-                      </Form.Field>
-
-                      <Form.Field>
-                        <Checkbox
-                          label="Permanently store this SSID/Password pair in RP2W"
-                          checked={permanentStore}
-                          onChange={(e, { checked }) => setPermanentStore(checked)}
-                          disabled={wifiLoading}
-                        />
-                      </Form.Field>
-
-                      <div className="wifi-form-buttons">
-                        <Button 
-                          type="submit" 
-                          primary 
-                          loading={wifiLoading}
-                          disabled={wifiLoading || !ssid.trim() || !password.trim()}
-                          icon="send"
-                          labelPosition="left"
-                          content="Send Configuration"
-                        />
-                        <Button 
-                          type="button" 
-                          secondary 
-                          onClick={clearWifiForm}
-                          disabled={wifiLoading}
-                          icon="refresh"
-                          content="Clear Form"
-                        />
-                      </div>
-                    </Form>
-                  </Card.Content>
-                </Card>
-
-                <Card className="wifi-output-card" style={{ marginTop: '15px' }}>
-                  <Card.Content>
-                    <Card.Header>
-                      WiFi Output
-                      <Button 
-                        floated="right" 
-                        size="mini" 
-                        onClick={clearWifiOutput}
-                        disabled={wifiLoading}
-                        icon="trash"
-                        content="Clear"
-                      />
-                    </Card.Header>
-                  </Card.Content>
-                  <Card.Content>
-                    {lastResult && (
-                      <Message 
-                        color={lastResult.type === 'success' ? 'green' : 
-                               lastResult.type === 'warning' ? 'yellow' : 
-                               lastResult.type === 'error' ? 'red' : 'blue'}
-                        icon={lastResult.type === 'success' ? 'check circle' : 
-                              lastResult.type === 'warning' ? 'warning circle' : 
-                              lastResult.type === 'error' ? 'times circle' : 'info circle'}
-                        header={lastResult.type === 'success' ? 'Success' : 
-                                lastResult.type === 'warning' ? 'Warning' : 
-                                lastResult.type === 'error' ? 'Error' : 'Information'}
-                        content={lastResult.message}
-                      />
-                    )}
-                    
-                    <Segment className="output-segment">
-                      <TextArea
-                        value={output}
-                        placeholder="WiFi configuration output will appear here..."
-                        style={{ width: '100%', minHeight: '200px' }}
-                        readOnly
-                      />
-                    </Segment>
-                  </Card.Content>
-                </Card>
               </div>
-            )}
-            
-            <Segment className="status-details">
-              <div className="status-grid">
-                <div className="status-item">
-                  <strong>Selected Connection:</strong> 
-                  <span>{selectedOption ? internetOptions.find(opt => opt.value === selectedOption)?.text : 'None'}</span>
-                </div>
-                <div className="status-item">
-                  <strong>Port Status:</strong> 
-                  <span>{isConnecting ? 'Initializing...' : selectedOption ? 'Ready' : 'Standby'}</span>
-                </div>
-                <div className="status-item">
-                  <strong>Internet Status:</strong> 
-                  <span>
-                    {connectionStatus === 'success' ? '✅ Connected' : 
-                     connectionStatus === 'warning' ? '⚠️ Port Active, Connectivity Unknown' : 
-                     connectionStatus === 'error' ? '❌ Failed' : 
-                     '⚪ Not tested'}
-                  </span>
-                </div>
-              </div>
-            </Segment>
+            </div>
           </Card.Content>
         </Card>
+
+        {/* Starlink Power Warning */}
+        {selectedOption === 'starlink' && (
+          <Message 
+            color="red"
+            icon="warning sign"
+            header="Important Notice"
+            content="Be sure Power is applied"
+            style={{ marginBottom: '15px' }}
+          />
+        )}
+
+        {/* Status Message Display */}
+        {statusMessage && connectionStatus !== 'success' && (
+          <Message 
+            color={getStatusColor()}
+            icon={getStatusIcon()}
+            header={connectionStatus === 'warning' ? 'Partial Success' : 
+                    connectionStatus === 'error' ? 'Connection Failed' : 
+                    connectionStatus === 'info' ? 'Information' : 'Status'}
+            content={statusMessage}
+          />
+        )}
+
+        {/* WiFi Configuration Section */}
+        {selectedOption === 'wifi' && (
+          <div style={{ marginBottom: '20px' }}>
+            <Card className="wifi-config-card">
+              <Card.Content>
+                <Card.Header>WiFi Configuration</Card.Header>
+                <Card.Description>
+                  Configure WiFi settings for RP2W device
+                </Card.Description>
+              </Card.Content>
+              <Card.Content>
+                <Form onSubmit={handleWifiSubmit}>
+                  <Form.Field required>
+                    <label>SSID (Network Name)</label>
+                    <Form.Input
+                      placeholder="Enter WiFi network name"
+                      value={ssid}
+                      onChange={(e) => setSsid(e.target.value)}
+                      disabled={wifiLoading}
+                      icon="wifi"
+                      iconPosition="left"
+                    />
+                  </Form.Field>
+                  
+                  <Form.Field required>
+                    <label>Password</label>
+                    <Form.Input
+                      type="password"
+                      placeholder="Enter WiFi password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      disabled={wifiLoading}
+                      icon="lock"
+                      iconPosition="left"
+                    />
+                  </Form.Field>
+
+                  <Form.Field>
+                    <Checkbox
+                      label="Permanently store this SSID/Password pair in RP2W"
+                      checked={permanentStore}
+                      onChange={(e, { checked }) => setPermanentStore(checked)}
+                      disabled={wifiLoading}
+                    />
+                  </Form.Field>
+
+                  <div className="wifi-form-buttons">
+                    <Button 
+                      type="submit" 
+                      primary 
+                      loading={wifiLoading}
+                      disabled={wifiLoading || !ssid.trim() || !password.trim()}
+                      icon="send"
+                      labelPosition="left"
+                      content="Send Configuration"
+                    />
+                    <Button 
+                      type="button" 
+                      secondary 
+                      onClick={clearWifiForm}
+                      disabled={wifiLoading}
+                      icon="refresh"
+                      content="Clear Form"
+                    />
+                  </div>
+                </Form>
+              </Card.Content>
+            </Card>
+
+            <Card className="wifi-output-card" style={{ marginTop: '15px' }}>
+              <Card.Content>
+                <Card.Header>
+                  WiFi Output
+                  <Button 
+                    floated="right" 
+                    size="mini" 
+                    onClick={clearWifiOutput}
+                    disabled={wifiLoading}
+                    icon="trash"
+                    content="Clear"
+                  />
+                </Card.Header>
+              </Card.Content>
+              <Card.Content>
+                {lastResult && (
+                  <Message 
+                    color={lastResult.type === 'success' ? 'green' : 
+                           lastResult.type === 'warning' ? 'yellow' : 
+                           lastResult.type === 'error' ? 'red' : 'blue'}
+                    icon={lastResult.type === 'success' ? 'check circle' : 
+                          lastResult.type === 'warning' ? 'warning circle' : 
+                          lastResult.type === 'error' ? 'times circle' : 'info circle'}
+                    header={lastResult.type === 'success' ? 'Success' : 
+                            lastResult.type === 'warning' ? 'Warning' : 
+                            lastResult.type === 'error' ? 'Error' : 'Information'}
+                    content={lastResult.message}
+                  />
+                )}
+                
+                <Segment className="output-segment">
+                  <TextArea
+                    value={output}
+                    placeholder="WiFi configuration output will appear here..."
+                    style={{ width: '100%', minHeight: '200px' }}
+                    readOnly
+                  />
+                </Segment>
+              </Card.Content>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );

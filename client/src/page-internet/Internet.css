@@ -9,17 +9,31 @@
   flex-direction: column;
   align-items: center;
   gap: 20px;
-  max-width: 500px; /* Reduced to better match Home page proportions */
-  margin: 20px auto 0 auto;
-  padding: 0 15px;
+  max-width: 400px; /* Further reduce to match title text width more closely */
+  width: 100%;
+  margin: 20px auto 0 auto; /* Center the container */
+  padding: 0;
 }
 
 .internet-control-card {
-  width: 100%;
-  max-width: 480px; /* Adjusted for smaller container */
+  width: 100% !important; /* 100% of the container width */
+  max-width: none !important; /* No additional max-width constraint */
   box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important;
   border-radius: 8px !important;
   background: white !important;
+  margin: 0 !important;
+}
+
+/* Override semantic-ui Card defaults */
+.internet-control-card.ui.card {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+/* Also override any nested Card.Content width constraints */
+.internet-control-card .content {
+  width: 100% !important;
 }
 
 .internet-status-card {

@@ -12,6 +12,7 @@ import requests
 #import MQTTClient
 import rvglue
 from typing import Annotated
+from kasa_power_strip import KasaPowerStrip, KasaPowerStripError
 
 from fastapi import FastAPI, Body
 from pydantic import BaseModel
@@ -243,6 +244,15 @@ PORT_TO_CONNECTION_TYPE = {
     4: 'wired'
 }
 
+# Extended mapping for cellular-amp (same USB port, different Kasa requirements)
+EXTENDED_CONNECTION_MAPPING = {
+    'cellular': {'usb_port': 1, 'kasa_port': None},
+    'cellular-amp': {'usb_port': 1, 'kasa_port': 1},
+    'wifi': {'usb_port': 2, 'kasa_port': None},
+    'starlink': {'usb_port': 3, 'kasa_port': 6},
+    'wired': {'usb_port': 4, 'kasa_port': None}
+}
+
 def get_connection_init_delay(port_number):
     """Get the initialization delay for a specific port/connection type."""
     connection_type = PORT_TO_CONNECTION_TYPE.get(port_number, 'wired')
@@ -306,6 +316,7 @@ def update_current_internet_connection(port, action):
 class InternetPowerData(BaseModel):
     port: int  # 1-4 for specific ports, 0 for all ports off
     action: str  # 'on' or 'off'
+    kasaPort: int = None  # Optional Kasa power strip port
 
 class InternetTestData(BaseModel):
     connection_type: str  # 'cellular', 'wifi', 'starlink', 'wired'
@@ -315,6 +326,21 @@ class InternetResponse(BaseModel):
     message: str
     port: int = None
     connected: bool = None
+
+def get_kasa_power_strip():
+    """Get Kasa Power Strip Controller instance. Returns None if not available."""
+    try:
+        # Try to create and connect to Kasa power strip
+        kasa_strip = KasaPowerStrip()  # Auto-discovery mode
+        if kasa_strip.connect():
+            print("INFO: Kasa power strip connected successfully")
+            return kasa_strip
+        else:
+            print("WARNING: No Kasa power strip found or connection failed")
+            return None
+    except Exception as e:
+        print(f"WARNING: Kasa power strip controller not available: {e}")
+        return None
 
 def get_usb_hub_controller():
     """Get USB Hub Controller instance. Returns None if not available."""
@@ -409,18 +435,47 @@ def test_internet_connectivity(connection_type="generic", timeout=10):
     
     return test_results
 
+@app.get("/api/kasa/power/{outlet_id}")
+async def get_kasa_power(outlet_id: int) -> dict:
+    """Get power consumption from a specific Kasa outlet."""
+    try:
+        kasa_strip = get_kasa_power_strip()
+        if not kasa_strip:
+            return {"success": False, "power": 0, "message": "Kasa power strip not available"}
+        
+        # Convert to 0-based indexing for the Kasa controller
+        power_data = kasa_strip.get_power_consumption(outlet_id - 1)
+        
+        # Check if there was an error in the power data
+        if 'error' in power_data:
+            print(f"Kasa power reading error for port {outlet_id}: {power_data['error']}")
+            return {"success": False, "power": 0, "message": power_data['error']}
+        
+        # Extract power value in watts
+        power_watts = power_data.get('power_w', 0)
+        
+        return {
+            "success": True, 
+            "power": round(power_watts, 1),
+            "message": f"Power reading from Kasa port {outlet_id}: {power_watts}W"
+        }
+        
+    except Exception as e:
+        print(f"ERROR: Failed to get Kasa power reading for port {outlet_id}: {e}")
+        return {"success": False, "power": 0, "message": f"Error reading power: {str(e)}"}
+
 @app.get("/api/internet/status")
 async def get_internet_status() -> dict:
     """Get the current internet connection status."""
     global current_internet_connection
     return {
         "current_connection": current_internet_connection,
-        "available_connections": ["none", "cellular", "wifi", "starlink", "wired"]
+        "available_connections": ["none", "cellular", "cellular-amp", "wifi", "starlink", "wired"]
     }
 
 @app.post("/api/internet/power")
 async def internet_power_control(data: Annotated[InternetPowerData, Body()]) -> InternetResponse:
-    """Control USB hub ports for internet connections."""
+    """Control USB hub ports and Kasa power strip for internet connections."""
     try:
         hub = get_usb_hub_controller()
         if not hub:
@@ -430,20 +485,49 @@ async def internet_power_control(data: Annotated[InternetPowerData, Body()]) -> 
                 port=data.port
             )
         
+        # Handle Kasa power strip control if specified
+        kasa_success = True
+        kasa_message = ""
+        if data.kasaPort is not None:
+            kasa_strip = get_kasa_power_strip()
+            if kasa_strip:
+                try:
+                    if data.action.lower() == 'on':
+                        kasa_strip.turn_on_outlet(data.kasaPort - 1)  # Convert to 0-based indexing
+                        kasa_message = f", Kasa port {data.kasaPort} turned on"
+                        print(f"INFO: Kasa power strip port {data.kasaPort} turned on")
+                    else:
+                        kasa_strip.turn_off_outlet(data.kasaPort - 1)  # Convert to 0-based indexing
+                        kasa_message = f", Kasa port {data.kasaPort} turned off"
+                        print(f"INFO: Kasa power strip port {data.kasaPort} turned off")
+                except Exception as e:
+                    print(f"WARNING: Kasa power strip operation failed: {e}")
+                    kasa_success = False
+                    kasa_message = f", Kasa port {data.kasaPort} control failed"
+            else:
+                print(f"WARNING: Kasa power strip not available for port {data.kasaPort}")
+                kasa_success = False
+                kasa_message = f", Kasa power strip not available"
+        
         if data.port == 0:  # All ports off
             result = hub.all_off()
             if result:
                 time.sleep(USB_HUB_PORT_DELAY_ALL_OFF)  # Allow time for all ports to turn off
                 update_current_internet_connection(0, "off")  # Update state
+                
+                success_msg = "All USB ports powered off"
+                if not kasa_success:
+                    success_msg += kasa_message
+                
                 return InternetResponse(
                     success=True,
-                    message="All USB ports powered off",
+                    message=success_msg,
                     port=0
                 )
             else:
                 return InternetResponse(
                     success=False,
-                    message="Failed to power off all USB ports",
+                    message="Failed to power off all USB ports" + kasa_message,
                     port=0
                 )
         
@@ -468,15 +552,22 @@ async def internet_power_control(data: Annotated[InternetPowerData, Body()]) -> 
             
             if result:
                 update_current_internet_connection(data.port, data.action)  # Update state
+                
+                success_msg = f"USB port {data.port} {action_msg} successfully"
+                if kasa_success and data.kasaPort:
+                    success_msg += kasa_message
+                elif not kasa_success and data.kasaPort:
+                    success_msg += kasa_message
+                
                 return InternetResponse(
                     success=True,
-                    message=f"USB port {data.port} {action_msg} successfully",
+                    message=success_msg,
                     port=data.port
                 )
             else:
                 return InternetResponse(
                     success=False,
-                    message=f"Failed to {data.action} USB port {data.port}",
+                    message=f"Failed to {data.action} USB port {data.port}" + kasa_message,
                     port=data.port
                 )
         
