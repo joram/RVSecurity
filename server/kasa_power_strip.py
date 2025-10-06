@@ -40,10 +40,37 @@ class KasaPowerStrip:
             host: IP address of the power strip (if None, will auto-discover)
             timeout: Connection timeout in seconds (default: 10)
         """
-        self.host = host
-        self.timeout = timeout
+        import os
+        
+        # Support environment variables for Docker configuration
+        self.host = host or os.getenv('KASA_HOST')
+        self.timeout = timeout or int(os.getenv('KASA_DEFAULT_TIMEOUT', '10'))
         self.device = None
         self._loop = None
+        self._is_docker = self._detect_docker_environment()
+    
+    def _detect_docker_environment(self) -> bool:
+        """Detect if running inside a Docker container."""
+        import os
+        import pathlib
+        
+        # Check for .dockerenv file
+        if pathlib.Path('/.dockerenv').exists():
+            return True
+            
+        # Check for docker in cgroup
+        try:
+            with open('/proc/1/cgroup', 'r') as f:
+                if 'docker' in f.read():
+                    return True
+        except:
+            pass
+            
+        # Check environment variables commonly set in Docker
+        if os.getenv('DOCKER_CONTAINER') or os.getenv('container'):
+            return True
+            
+        return False
     
     @classmethod
     async def discover_power_strips(cls, scan_all_networks: bool = True) -> List[Dict]:
@@ -199,8 +226,16 @@ class KasaPowerStrip:
                         
                         network = f"{'.'.join(map(str, network_parts))}/{prefix}"
                         
-                        # Skip docker and loopback networks
-                        if not network.startswith('172.17.') and not network.startswith('127.'):
+                        # Skip docker internal networks but allow host networks in Docker
+                        # In Docker with host networking, we want to scan the actual host networks
+                        should_skip = False
+                        if network.startswith('172.17.') or network.startswith('127.'):
+                            should_skip = True
+                        # Allow Docker bridge networks if they're the primary interface in containers
+                        elif current_interface == 'docker0' and not networks:
+                            should_skip = False
+                        
+                        if not should_skip:
                             networks.append({
                                 "interface": current_interface,
                                 "network": network,
@@ -224,6 +259,20 @@ class KasaPowerStrip:
         Returns:
             KasaPowerStrip instance if found and connected, None otherwise
         """
+        import os
+        
+        # Check for environment variable first (useful for Docker deployments)
+        env_host = os.getenv('KASA_HOST')
+        if env_host:
+            print(f"Using Kasa host from environment: {env_host}")
+            try:
+                strip = cls(host=env_host, timeout=timeout)
+                if await strip._async_connect():
+                    return strip
+            except Exception as e:
+                print(f"Failed to connect to environment-specified host {env_host}: {e}")
+                # Fall through to discovery
+        
         print("Discovering power strips on all networks...")
         power_strips = await cls.discover_power_strips(scan_all_networks=True)
         
@@ -243,44 +292,58 @@ class KasaPowerStrip:
                 print(f"Failed to connect: {e}")
                 return None
         else:
-            # Multiple found, let user choose
-            print(f"Found {len(power_strips)} power strips:")
-            for i, strip in enumerate(power_strips, 1):
-                network_info = f" (on {strip.get('interface', 'unknown')})" if 'interface' in strip else ""
-                print(f"  {i}. {strip['alias']} at {strip['ip']}{network_info}")
-                print(f"     Model: {strip['model']}, Outlets: {strip['children_count']}")
-            
-            # Prompt for choice
-            try:
-                choice = input(f"\nSelect power strip (1-{len(power_strips)}) or 'q' to quit: ").strip()
-                
-                if choice.lower() == 'q':
-                    print("User cancelled")
+            # Multiple found - in Docker environments, just use the first one
+            # In interactive environments, let user choose
+            if os.getenv('DOCKER_CONTAINER') or not os.isatty(0):
+                # Non-interactive environment (Docker), use first power strip
+                strip_info = power_strips[0]
+                print(f"Non-interactive environment, using first power strip: {strip_info['alias']} at {strip_info['ip']}")
+                try:
+                    strip = cls(host=strip_info["ip"], timeout=timeout)
+                    if await strip._async_connect():
+                        return strip
+                except Exception as e:
+                    print(f"Failed to connect: {e}")
                     return None
+            else:
+                # Interactive environment, let user choose
+                print(f"Found {len(power_strips)} power strips:")
+                for i, strip in enumerate(power_strips, 1):
+                    network_info = f" (on {strip.get('interface', 'unknown')})" if 'interface' in strip else ""
+                    print(f"  {i}. {strip['alias']} at {strip['ip']}{network_info}")
+                    print(f"     Model: {strip['model']}, Outlets: {strip['children_count']}")
                 
-                choice_idx = int(choice) - 1
-                if 0 <= choice_idx < len(power_strips):
-                    selected = power_strips[choice_idx]
-                    print(f"Connecting to {selected['alias']} at {selected['ip']}...")
-                    
-                    try:
-                        strip = cls(host=selected["ip"], timeout=timeout)
-                        if await strip._async_connect():
-                            print(f"Connected successfully!")
-                            return strip
-                        else:
-                            print(f"Connection failed")
-                            return None
-                    except Exception as e:
-                        print(f"Connection error: {e}")
+                # Prompt for choice
+                try:
+                    choice = input(f"\nSelect power strip (1-{len(power_strips)}) or 'q' to quit: ").strip()
+                
+                    if choice.lower() == 'q':
+                        print("User cancelled")
                         return None
-                else:
-                    print("Invalid selection")
-                    return None
                     
-            except (ValueError, KeyboardInterrupt):
-                print("Invalid input or cancelled")
-                return None
+                    choice_idx = int(choice) - 1
+                    if 0 <= choice_idx < len(power_strips):
+                        selected = power_strips[choice_idx]
+                        print(f"Connecting to {selected['alias']} at {selected['ip']}...")
+                        
+                        try:
+                            strip = cls(host=selected["ip"], timeout=timeout)
+                            if await strip._async_connect():
+                                print(f"Connected successfully!")
+                                return strip
+                            else:
+                                print(f"Connection failed")
+                                return None
+                        except Exception as e:
+                            print(f"Connection error: {e}")
+                            return None
+                    else:
+                        print("Invalid selection")
+                        return None
+                        
+                except (ValueError, KeyboardInterrupt):
+                    print("Invalid input or cancelled")
+                    return None
         
         return None
     
@@ -326,7 +389,17 @@ class KasaPowerStrip:
             # If no host specified, try auto-discovery
             if self.host is None:
                 print("No host specified, attempting auto-discovery...")
-                power_strips = await self.discover_power_strips()
+                
+                # Use environment variable for discovery timeout in Docker
+                import os
+                discovery_timeout = int(os.getenv('KASA_DISCOVERY_TIMEOUT', '10'))
+                
+                if self._is_docker:
+                    print("Running in Docker container, using host network discovery...")
+                    # In Docker with host networking, we might need to be more aggressive
+                    power_strips = await self.discover_power_strips(scan_all_networks=True)
+                else:
+                    power_strips = await self.discover_power_strips()
                 
                 if not power_strips:
                     raise KasaPowerStripError("No power strips found on network")

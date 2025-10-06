@@ -24,8 +24,8 @@ const Internet = () => {
   const [kasaPort6Power, setKasaPort6Power] = useState(0);
 
   const internetOptions = [
-    { value: 'cellular', text: 'Cellular', port: 1, waitTime: 15, kasaPort: null },
-    { value: 'cellular-amp', text: 'Cellular + Amp', port: 1, waitTime: 15, kasaPort: 1 },
+    { value: 'cellular', text: 'Cellular', port: 1, waitTime: 60, kasaPort: null },
+    { value: 'cellular-amp', text: 'Cellular + Amp', port: 1, waitTime: 60, kasaPort: 1 },
     { value: 'wifi', text: 'WiFi', port: 2, waitTime: 10, kasaPort: null },
     { value: 'starlink', text: 'Starlink', port: 3, waitTime: 20, kasaPort: 6 },
     { value: 'wired', text: 'Wired', port: 4, waitTime: 8, kasaPort: null },
@@ -303,9 +303,9 @@ const Internet = () => {
     
     switch (option.value) {
       case 'cellular':
-        return isSelected ? 'Actual: 4 Watts' : 'Est: 4 Watts';
+        return isSelected ? 'Actual: 2 Watts' : 'Est: 2 Watts';
       case 'cellular-amp':
-        return isSelected ? `Actual: ${4 + kasaPort1Power} Watts` : 'Est: 54 Watts';
+        return isSelected ? `Actual: ${2 + kasaPort1Power} Watts` : 'Est: 54 Watts';
       case 'wifi':
         return isSelected ? 'Actual: 0.7 Watts' : 'Est: 0.7 Watts';
       case 'starlink':

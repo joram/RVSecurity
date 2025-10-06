@@ -10,6 +10,7 @@ packages = [
     "paho-mqtt==1.6.1",
     "tzlocal==5.0.1",
     "pyserial==3.5",  # Required for USB hub serial communication
+    "python-kasa>=0.5.0",  # Required for Kasa power strip control
     "rvglue @ git+https://github.com/tblank1024/rvglue",
     #"aiofiles",
     #"aiohttp==3.8.3",
