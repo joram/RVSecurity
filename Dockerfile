@@ -33,7 +33,7 @@ COPY --from=constants /app/server/constants.json server/.
 # Copy server files
 COPY server/server.py server/.
 COPY server/server_calcs.py server/.
-# Copy Kasa power strip controller
+# Copy Kasa power strip controller (blocking version only)
 COPY server/kasa_power_strip.py server/.
 # Copy USB hub controller module
 COPY usbhub_ascii.py server/.

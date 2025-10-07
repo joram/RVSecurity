@@ -327,20 +327,58 @@ class InternetResponse(BaseModel):
     port: int = None
     connected: bool = None
 
+# Global Kasa connection cache to prevent repeated discovery
+_kasa_strip_cache = None
+_kasa_cache_time = 0
+_kasa_cache_duration = 300  # Cache for 5 minutes
+
 def get_kasa_power_strip():
     """Get Kasa Power Strip Controller instance. Returns None if not available."""
+    import os
+    import time
+    
+    global _kasa_strip_cache, _kasa_cache_time
+    
+    # Check if Kasa is disabled via environment variable
+    if os.getenv('DISABLE_KASA', '').lower() in ('true', '1', 'yes'):
+        print("INFO: Kasa power strip disabled via DISABLE_KASA environment variable")
+        return None
+    
+    # Check cache validity
+    current_time = time.time()
+    if (_kasa_strip_cache is not None and 
+        (current_time - _kasa_cache_time) < _kasa_cache_duration):
+        print("INFO: Using cached Kasa power strip connection")
+        return _kasa_strip_cache
+    
+    # Cache is invalid or doesn't exist, try to create new connection
     try:
+        print("INFO: Attempting to create new Kasa power strip connection...")
+        
         # Try to create and connect to Kasa power strip
         kasa_strip = KasaPowerStrip()  # Auto-discovery mode
         if kasa_strip.connect():
             print("INFO: Kasa power strip connected successfully")
+            _kasa_strip_cache = kasa_strip
+            _kasa_cache_time = current_time
             return kasa_strip
         else:
             print("WARNING: No Kasa power strip found or connection failed")
+            print("INFO: Set DISABLE_KASA=true environment variable to disable Kasa functionality")
+            _kasa_strip_cache = None
             return None
     except Exception as e:
         print(f"WARNING: Kasa power strip controller not available: {e}")
+        print("INFO: Set DISABLE_KASA=true environment variable to disable Kasa functionality")
+        _kasa_strip_cache = None
         return None
+
+def clear_kasa_cache():
+    """Clear the Kasa connection cache - useful for testing or after errors."""
+    global _kasa_strip_cache, _kasa_cache_time
+    _kasa_strip_cache = None
+    _kasa_cache_time = 0
+    print("INFO: Kasa connection cache cleared")
 
 def get_usb_hub_controller():
     """Get USB Hub Controller instance. Returns None if not available."""
@@ -436,8 +474,8 @@ def test_internet_connectivity(connection_type="generic", timeout=10):
     return test_results
 
 @app.get("/api/kasa/power/{outlet_id}")
-async def get_kasa_power(outlet_id: int) -> dict:
-    """Get power consumption from a specific Kasa outlet."""
+def get_kasa_power(outlet_id: int) -> dict:  # Removed async
+    """Get power consumption from a specific Kasa outlet using simple blocking calls."""
     try:
         kasa_strip = get_kasa_power_strip()
         if not kasa_strip:
@@ -449,6 +487,7 @@ async def get_kasa_power(outlet_id: int) -> dict:
         # Check if there was an error in the power data
         if 'error' in power_data:
             print(f"Kasa power reading error for port {outlet_id}: {power_data['error']}")
+            clear_kasa_cache()  # Clear cache on error
             return {"success": False, "power": 0, "message": power_data['error']}
         
         # Extract power value in watts
@@ -459,22 +498,36 @@ async def get_kasa_power(outlet_id: int) -> dict:
             "power": round(power_watts, 1),
             "message": f"Power reading from Kasa port {outlet_id}: {power_watts}W"
         }
-        
+            
     except Exception as e:
-        print(f"ERROR: Failed to get Kasa power reading for port {outlet_id}: {e}")
-        return {"success": False, "power": 0, "message": f"Error reading power: {str(e)}"}
+        print(f"ERROR: Failed to get Kasa power for outlet {outlet_id}: {e}")
+        clear_kasa_cache()  # Clear cache on error
+        return {"success": False, "power": 0, "message": f"Kasa error: {str(e)}"}
 
 @app.get("/api/internet/status")
-async def get_internet_status() -> dict:
-    """Get the current internet connection status."""
+def get_internet_status() -> dict:  # Removed async
+    """Get current internet connection status."""
     global current_internet_connection
-    return {
-        "current_connection": current_internet_connection,
-        "available_connections": ["none", "cellular", "cellular-amp", "wifi", "starlink", "wired"]
-    }
+    
+    try:
+        # Detect current connection from USB hub
+        detected_connection = detect_current_internet_connection()
+        
+        return {
+            "current_connection": detected_connection,
+            "status": "connected" if detected_connection != "none" else "disconnected",
+            "message": f"Current internet connection: {detected_connection}"
+        }
+    except Exception as e:
+        print(f"Error getting internet status: {e}")
+        return {
+            "current_connection": "unknown",
+            "status": "error", 
+            "message": f"Error detecting connection: {str(e)}"
+        }
 
 @app.post("/api/internet/power")
-async def internet_power_control(data: Annotated[InternetPowerData, Body()]) -> InternetResponse:
+def internet_power_control(data: Annotated[InternetPowerData, Body()]) -> InternetResponse:  # Removed async
     """Control USB hub ports and Kasa power strip for internet connections."""
     try:
         hub = get_usb_hub_controller()
@@ -485,29 +538,40 @@ async def internet_power_control(data: Annotated[InternetPowerData, Body()]) -> 
                 port=data.port
             )
         
-        # Handle Kasa power strip control if specified
+        # Handle Kasa power strip control if specified using simple blocking calls
         kasa_success = True
         kasa_message = ""
         if data.kasaPort is not None:
-            kasa_strip = get_kasa_power_strip()
-            if kasa_strip:
-                try:
-                    if data.action.lower() == 'on':
-                        kasa_strip.turn_on_outlet(data.kasaPort - 1)  # Convert to 0-based indexing
-                        kasa_message = f", Kasa port {data.kasaPort} turned on"
-                        print(f"INFO: Kasa power strip port {data.kasaPort} turned on")
-                    else:
-                        kasa_strip.turn_off_outlet(data.kasaPort - 1)  # Convert to 0-based indexing
-                        kasa_message = f", Kasa port {data.kasaPort} turned off"
-                        print(f"INFO: Kasa power strip port {data.kasaPort} turned off")
-                except Exception as e:
-                    print(f"WARNING: Kasa power strip operation failed: {e}")
+            try:
+                kasa_strip = get_kasa_power_strip()
+                if kasa_strip:
+                    try:
+                        if data.action.lower() == 'on':
+                            result = kasa_strip.turn_on_outlet(data.kasaPort - 1)  # Convert to 0-based indexing
+                            if not result:
+                                raise Exception("Turn on operation failed")
+                            kasa_message = f", Kasa port {data.kasaPort} turned on"
+                            print(f"INFO: Kasa power strip port {data.kasaPort} turned on")
+                        else:
+                            result = kasa_strip.turn_off_outlet(data.kasaPort - 1)  # Convert to 0-based indexing
+                            if not result:
+                                raise Exception("Turn off operation failed")
+                            kasa_message = f", Kasa port {data.kasaPort} turned off"
+                            print(f"INFO: Kasa power strip port {data.kasaPort} turned off")
+                    except Exception as e:
+                        print(f"WARNING: Kasa power strip operation failed: {e}")
+                        clear_kasa_cache()  # Clear cache on error
+                        kasa_success = False
+                        kasa_message = f", Kasa port {data.kasaPort} control failed: {str(e)}"
+                else:
+                    print(f"WARNING: Kasa power strip not available for port {data.kasaPort}")
                     kasa_success = False
-                    kasa_message = f", Kasa port {data.kasaPort} control failed"
-            else:
-                print(f"WARNING: Kasa power strip not available for port {data.kasaPort}")
+                    kasa_message = f", Kasa power strip not available"
+            except Exception as e:
+                print(f"ERROR: Failed to get Kasa power strip for port {data.kasaPort}: {e}")
+                clear_kasa_cache()  # Clear cache on error
                 kasa_success = False
-                kasa_message = f", Kasa power strip not available"
+                kasa_message = f", Kasa controller error: {str(e)}"
         
         if data.port == 0:  # All ports off
             result = hub.all_off()
@@ -586,7 +650,7 @@ async def internet_power_control(data: Annotated[InternetPowerData, Body()]) -> 
         )
 
 @app.post("/api/internet/test")
-async def internet_connectivity_test(data: Annotated[InternetTestData, Body()]) -> InternetResponse:
+def internet_connectivity_test(data: Annotated[InternetTestData, Body()]) -> InternetResponse:  # Removed async
     """Test internet connectivity for the specified connection type."""
     try:
         # Use connection-specific settling delay before testing
@@ -637,7 +701,7 @@ class DataResponse(BaseModel):
 
 # This is the POWER page function that is called by the front end client
 @app.get("/data/power")
-async def data()-> DataResponse:
+def data()-> DataResponse:  # Removed async
 
     (Charger_AC_power, Charger_AC_voltage, Invert_AC_power, DC_Charger_power, DC_Charger_volts, Invert_DC_power, Invert_status_num)= InvertCalcs()
     (ShorePower, GenPower)= ATS_Calcs()
@@ -681,7 +745,7 @@ async def data()-> DataResponse:
 
 # This is the HOME page function that is called by the front end client
 @app.get("/data/home")
-async def data()-> DataResponse:
+def data()-> DataResponse:  # Removed async
 
     (Charger_AC_power, Charger_AC_voltage, Invert_AC_power, DC_Charger_power, DC_Charger_volts, Invert_DC_power, Invert_status_num)= InvertCalcs()
     (ShorePower, GenPower)= ATS_Calcs()
