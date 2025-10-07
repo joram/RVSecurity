@@ -26,9 +26,9 @@ const Internet = () => {
   const internetOptions = [
     { value: 'cellular', text: 'Cellular', port: 1, waitTime: 60, kasaPort: null },
     { value: 'cellular-amp', text: 'Cellular + Amp', port: 1, waitTime: 60, kasaPort: 1 },
-    { value: 'wifi', text: 'WiFi', port: 2, waitTime: 10, kasaPort: null },
-    { value: 'starlink', text: 'Starlink', port: 3, waitTime: 20, kasaPort: 6 },
-    { value: 'wired', text: 'Wired', port: 4, waitTime: 8, kasaPort: null },
+    { value: 'wifi', text: 'WiFi', port: 2, waitTime: 30, kasaPort: null },
+    { value: 'starlink', text: 'Starlink', port: 3, waitTime: 120, kasaPort: 6 },
+    { value: 'wired', text: 'Wired', port: 4, waitTime: 30, kasaPort: null },
     { value: 'none', text: 'None', port: 0, waitTime: 0, kasaPort: null }
   ];
 
@@ -103,7 +103,8 @@ const Internet = () => {
           body: JSON.stringify({
             port: 0, // 0 means all ports off
             action: 'off',
-            kasaPort: null
+            kasaPort: null,
+            connection_type: 'none'
           }),
           signal: newAbortController.signal
         });
@@ -143,7 +144,8 @@ const Internet = () => {
         body: JSON.stringify({
           port: option.port,
           action: 'on',
-          kasaPort: option.kasaPort
+          kasaPort: option.kasaPort,
+          connection_type: option.value
         }),
         signal: newAbortController.signal
       });
@@ -287,14 +289,9 @@ const Internet = () => {
     }
   }, []);
 
-  // Fetch power readings on component mount and periodically
+  // Fetch power readings only on component mount (page load/refresh)
   useEffect(() => {
     fetchKasaPower();
-    
-    // Update power readings every 30 seconds
-    const powerInterval = setInterval(fetchKasaPower, 30000);
-    
-    return () => clearInterval(powerInterval);
   }, [fetchKasaPower]);
 
   // Function to get power consumption text for each option

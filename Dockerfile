@@ -19,6 +19,12 @@ FROM python:3.11-slim AS reactbase
 RUN python3 -m pip install --upgrade pip
 RUN apt-get update && apt-get install build-essential -y
 RUN apt-get update && apt-get install -y git
+# Install timezone data to handle Kasa device timezone responses
+RUN apt-get update && apt-get install -y tzdata
+# Install USB management tools for cellular modem handling
+RUN apt-get update && apt-get install -y usbutils modemmanager
+# Create PST8PDT timezone link to handle Kasa device timezone format
+RUN ln -sf /usr/share/zoneinfo/America/Los_Angeles /usr/share/zoneinfo/PST8PDT
 
 WORKDIR /app/rvsecurity/server
 COPY server/setup.py .
@@ -35,6 +41,8 @@ COPY server/server.py server/.
 COPY server/server_calcs.py server/.
 # Copy Kasa power strip controller (blocking version only)
 COPY server/kasa_power_strip.py server/.
+# Copy USB modem manager for cellular modem handling
+COPY server/usb_modem_manager.py server/.
 # Copy USB hub controller module
 COPY usbhub_ascii.py server/.
 #COPY server/mqttclient.py server/.
