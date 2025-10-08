@@ -336,22 +336,29 @@ _kasa_strip_cache = None
 _kasa_cache_time = 0
 _kasa_cache_duration = 300  # Cache for 5 minutes
 _kasa_last_failure_time = 0
-_kasa_failure_cache_duration = 60  # Cache failures for 1 minute to prevent spam
+_kasa_failure_cache_duration = 15  # Reduced to 15 seconds for faster recovery when device comes back online
 
 def get_kasa_power_strip():
     """Get Kasa Power Strip Controller instance. Returns None if not available."""
     import os
     import time
     
-    global _kasa_strip_cache, _kasa_cache_time
+    global _kasa_strip_cache, _kasa_cache_time, _kasa_last_failure_time
     
     # Check if Kasa is disabled via environment variable
     if os.getenv('DISABLE_KASA', '').lower() in ('true', '1', 'yes'):
         print("INFO: Kasa power strip disabled via DISABLE_KASA environment variable")
         return None
     
-    # Check cache validity
     current_time = time.time()
+    
+    # Check if we recently had a failure and should avoid retrying
+    if (_kasa_last_failure_time > 0 and 
+        (current_time - _kasa_last_failure_time) < _kasa_failure_cache_duration):
+        # Recent failure, don't retry yet
+        return None
+    
+    # Check cache validity for successful connections
     if (_kasa_strip_cache is not None and 
         (current_time - _kasa_cache_time) < _kasa_cache_duration):
         # Cache is still valid, return cached instance
@@ -361,26 +368,27 @@ def get_kasa_power_strip():
     try:
         print("INFO: Attempting to create new Kasa power strip connection...")
         
-        # Try to create and connect to Kasa power strip
-        kasa_strip = KasaPowerStrip()  # Auto-discovery mode
+        # Try to create and connect to Kasa power strip with balanced timeout
+        kasa_strip = KasaPowerStrip(timeout=8)  # Increased timeout for device discovery
         if kasa_strip.connect():
             print("INFO: Kasa power strip connected successfully")
             _kasa_strip_cache = kasa_strip
             _kasa_cache_time = current_time
+            _kasa_last_failure_time = 0  # Reset failure time on success
             return kasa_strip
         else:
             print("WARNING: No Kasa power strip found or connection failed")
             print("INFO: Set DISABLE_KASA=true environment variable to disable Kasa functionality")
-            # Cache the failure for a shorter period to avoid repeated connection attempts
+            # Cache the failure to avoid immediate retries
             _kasa_strip_cache = None
-            _kasa_cache_time = current_time  # Cache the failure attempt
+            _kasa_last_failure_time = current_time
             return None
     except Exception as e:
         print(f"WARNING: Kasa power strip controller not available: {e}")
         print("INFO: Set DISABLE_KASA=true environment variable to disable Kasa functionality")
-        # Cache the failure for a shorter period to avoid repeated connection attempts
+        # Cache the failure to avoid immediate retries
         _kasa_strip_cache = None
-        _kasa_cache_time = current_time  # Cache the failure attempt
+        _kasa_last_failure_time = current_time
         return None
 
 def clear_kasa_cache():
@@ -942,24 +950,73 @@ def control_usb_port_debug(port_num: int, data: Annotated[dict, Body()]) -> dict
 @app.get("/api/debug/kasa/status")
 def get_kasa_debug_status() -> dict:
     """Get current status and power consumption of all Kasa outlets for debug interface."""
+    import time
+    global _kasa_last_failure_time
+    
+    # Fast fail if we recently had a connection failure
+    current_time = time.time()
+    if (_kasa_last_failure_time > 0 and 
+        (current_time - _kasa_last_failure_time) < _kasa_failure_cache_duration):
+        print("INFO: Debug page - using cached failure, returning mock data immediately")
+        return {
+            "success": True,
+            "message": "Kasa device recently failed - showing cached offline status",
+            "outlets": {
+                1: {"enabled": False, "power_watts": 0, "name": "Kasa Outlet 1 (Cellular Amp) [OFFLINE]", "mock": True, "status": "offline"},
+                2: {"enabled": True, "power_watts": 0.1, "name": "Kasa Outlet 2 (TV) [OFFLINE]", "mock": True, "status": "offline"},
+                3: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 3 (Soundbar) [OFFLINE]", "mock": True, "status": "offline"},
+                4: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 4 (Synology) [OFFLINE]", "mock": True, "status": "offline"},
+                5: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 5 [OFFLINE]", "mock": True, "status": "offline"},
+                6: {"enabled": False, "power_watts": 0.0, "name": "Kasa Outlet 6 (Starlink) [OFFLINE]", "mock": True, "status": "offline"}
+            }
+        }
+    
     try:
         kasa_strip = get_kasa_power_strip()
         if not kasa_strip:
             # Return mock data when Kasa is not available
             return {
                 "success": True,
-                "message": "Kasa power strip not available (mock data)",
+                "message": "Kasa power strip not available - showing mock data for testing",
                 "outlets": {
-                    1: {"enabled": False, "power_watts": 0, "name": "Kasa Outlet 1 (Cellular Amp)", "mock": True},
-                    2: {"enabled": True, "power_watts": 0.1, "name": "Kasa Outlet 2 (TV)", "mock": True},
-                    3: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 3 (Soundbar)", "mock": True},
-                    4: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 4 (Synology)", "mock": True},
-                    5: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 5", "mock": True},
-                    6: {"enabled": False, "power_watts": 0.0, "name": "Kasa Outlet 6 (Starlink)", "mock": True}
+                    1: {"enabled": False, "power_watts": 0, "name": "Kasa Outlet 1 (Cellular Amp) [OFFLINE]", "mock": True, "status": "offline"},
+                    2: {"enabled": True, "power_watts": 0.1, "name": "Kasa Outlet 2 (TV) [OFFLINE]", "mock": True, "status": "offline"},
+                    3: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 3 (Soundbar) [OFFLINE]", "mock": True, "status": "offline"},
+                    4: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 4 (Synology) [OFFLINE]", "mock": True, "status": "offline"},
+                    5: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 5 [OFFLINE]", "mock": True, "status": "offline"},
+                    6: {"enabled": False, "power_watts": 0.0, "name": "Kasa Outlet 6 (Starlink) [OFFLINE]", "mock": True, "status": "offline"}
                 }
             }
         
-        # Get status and power for all outlets (HS300 has 6 outlets)
+        # Test connection first before trying to get individual outlets
+        try:
+            # Try a simple connection test with short timeout
+            test_result = kasa_strip._run_kasa_command(['state'])
+            if 'error' in test_result:
+                raise KasaPowerStripError("Connection test failed")
+        except Exception as e:
+            # Connection failed, return mock data with error info
+            error_msg = str(e)
+            # Remove technical details for user-friendly message
+            if "Kasa command failed:" in error_msg:
+                error_msg = "Device connection failed"
+            elif "Kasa communication error" in error_msg:
+                error_msg = "Device temporarily unavailable"
+            
+            return {
+                "success": True,
+                "message": f"Kasa device unavailable ({error_msg}) - showing mock data",
+                "outlets": {
+                    1: {"enabled": False, "power_watts": 0, "name": "Kasa Outlet 1 (Cellular Amp) [ERROR]", "mock": True, "status": "error"},
+                    2: {"enabled": True, "power_watts": 0.1, "name": "Kasa Outlet 2 (TV) [ERROR]", "mock": True, "status": "error"},
+                    3: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 3 (Soundbar) [ERROR]", "mock": True, "status": "error"},
+                    4: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 4 (Synology) [ERROR]", "mock": True, "status": "error"},
+                    5: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 5 [ERROR]", "mock": True, "status": "error"},
+                    6: {"enabled": False, "power_watts": 0.0, "name": "Kasa Outlet 6 (Starlink) [ERROR]", "mock": True, "status": "error"}
+                }
+            }
+        
+        # Connection successful, get real outlet data
         outlets = {}
         for outlet_id in range(1, 7):  # Kasa outlets 1-6
             try:
@@ -970,8 +1027,9 @@ def get_kasa_debug_status() -> dict:
                     outlets[outlet_id] = {
                         "enabled": False,
                         "power_watts": 0,
-                        "name": f"Kasa Outlet {outlet_id}",
-                        "error": status_data['error']
+                        "name": f"Kasa Outlet {outlet_id} [COMM ERROR]",
+                        "error": "Communication error",
+                        "status": "comm_error"
                     }
                 else:
                     is_on = status_data.get('is_on', False)
@@ -983,38 +1041,57 @@ def get_kasa_debug_status() -> dict:
                     except:
                         power_watts = 0
                     
+                    # Get outlet name/alias if available
+                    outlet_names = {
+                        1: "Kasa Outlet 1 (Cellular Amp)",
+                        2: "Kasa Outlet 2 (TV)", 
+                        3: "Kasa Outlet 3 (Soundbar)",
+                        4: "Kasa Outlet 4 (Synology)",
+                        5: "Kasa Outlet 5",
+                        6: "Kasa Outlet 6 (Starlink)"
+                    }
+                    
                     outlets[outlet_id] = {
                         "enabled": is_on,
                         "power_watts": round(power_watts, 1),
-                        "name": f"Kasa Outlet {outlet_id}"
+                        "name": outlet_names.get(outlet_id, f"Kasa Outlet {outlet_id}"),
+                        "status": "online"
                     }
             except Exception as e:
                 outlets[outlet_id] = {
                     "enabled": False,
                     "power_watts": 0,
-                    "name": f"Kasa Outlet {outlet_id} (Error)",
-                    "error": str(e)
+                    "name": f"Kasa Outlet {outlet_id} [ERROR]",
+                    "error": "Individual outlet error",
+                    "status": "error"
                 }
         
         return {
             "success": True,
-            "message": "Kasa outlets status retrieved",
+            "message": "Kasa outlets status retrieved successfully",
             "outlets": outlets
         }
     except Exception as e:
-        # Return mock data on any error
+        # Complete failure, return mock data
+        error_msg = str(e)[:100]  # Limit error message length
         return {
             "success": True,
-            "message": f"Kasa error (mock data): {str(e)}",
+            "message": f"Kasa system error ({error_msg}) - showing mock data",
             "outlets": {
-                1: {"enabled": False, "power_watts": 0, "name": "Kasa Outlet 1 (Cellular Amp)", "mock": True},
-                2: {"enabled": True, "power_watts": 0.1, "name": "Kasa Outlet 2 (TV)", "mock": True},
-                3: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 3 (Soundbar)", "mock": True},
-                4: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 4 (Synology)", "mock": True},
-                5: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 5", "mock": True},
-                6: {"enabled": False, "power_watts": 0.0, "name": "Kasa Outlet 6 (Starlink)", "mock": True}
+                1: {"enabled": False, "power_watts": 0, "name": "Kasa Outlet 1 (Cellular Amp) [SYSTEM ERROR]", "mock": True, "status": "system_error"},
+                2: {"enabled": True, "power_watts": 0.1, "name": "Kasa Outlet 2 (TV) [SYSTEM ERROR]", "mock": True, "status": "system_error"},
+                3: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 3 (Soundbar) [SYSTEM ERROR]", "mock": True, "status": "system_error"},
+                4: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 4 (Synology) [SYSTEM ERROR]", "mock": True, "status": "system_error"},
+                5: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 5 [SYSTEM ERROR]", "mock": True, "status": "system_error"},
+                6: {"enabled": False, "power_watts": 0.0, "name": "Kasa Outlet 6 (Starlink) [SYSTEM ERROR]", "mock": True, "status": "system_error"}
             }
         }
+
+@app.post("/api/debug/kasa/clear-cache")
+def clear_kasa_cache_debug() -> dict:
+    """Clear Kasa connection cache to force reconnection attempt."""
+    clear_kasa_cache()
+    return {"success": True, "message": "Kasa connection cache cleared"}
 
 @app.post("/api/debug/kasa/{outlet_id}")
 def control_kasa_outlet_debug(outlet_id: int, data: Annotated[dict, Body()]) -> dict:

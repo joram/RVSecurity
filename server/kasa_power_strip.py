@@ -28,13 +28,13 @@ class KasaPowerStrip:
        - No asyncio dependencies
     """
     
-    def __init__(self, host: Optional[str] = None, timeout: int = 10):
+    def __init__(self, host: Optional[str] = None, timeout: int = 8):
         """
         Initialize the Kasa Power Strip controller.
         
         Args:
             host: IP address of the power strip (if None, will use environment variable)
-            timeout: Command timeout in seconds (default: 10)
+            timeout: Command timeout in seconds (default: 8, balanced for device discovery)
         """
         # Support environment variables for Docker configuration
         self.host = host or os.getenv('KASA_HOST')
@@ -74,7 +74,11 @@ class KasaPowerStrip:
                 cmd.append('--json')
             cmd.extend(command_args)
             
-            # Run the command with timeout
+            # Run the command with timeout and environment modifications to reduce warnings
+            env = os.environ.copy()
+            env['PYTHONWARNINGS'] = 'ignore'  # Suppress Python warnings including asyncio
+            env['PYTHONIOENCODING'] = 'utf-8'  # Ensure consistent encoding
+            
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -82,7 +86,8 @@ class KasaPowerStrip:
                 timeout=self.timeout,
                 check=True,
                 encoding='utf-8',
-                errors='replace'  # Replace problematic characters instead of failing
+                errors='replace',  # Replace problematic characters instead of failing
+                env=env  # Use modified environment
             )
             
             # Parse JSON output
@@ -102,6 +107,17 @@ class KasaPowerStrip:
             raise KasaPowerStripError(f"Command timed out after {self.timeout} seconds")
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr.strip() if e.stderr else str(e)
+            # Filter out aiohttp connection warnings that clutter the error messages
+            if error_msg and ('ERROR:asyncio:Unclosed' in error_msg or 'aiohttp' in error_msg):
+                # Extract just the relevant error info, skip the aiohttp spam
+                lines = error_msg.split('\n')
+                filtered_lines = [line for line in lines if not ('ERROR:asyncio:Unclosed' in line or 
+                                                               'client_session:' in line or 
+                                                               'connector:' in line or
+                                                               'connections:' in line)]
+                error_msg = '\n'.join(filtered_lines).strip()
+                if not error_msg:
+                    error_msg = "Kasa communication error (connection issues filtered)"
             raise KasaPowerStripError(f"Kasa command failed: {error_msg}")
         except FileNotFoundError:
             raise KasaPowerStripError("kasa CLI tool not found. Please install python-kasa package.")

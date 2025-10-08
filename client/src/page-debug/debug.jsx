@@ -9,6 +9,7 @@ function Debug() {
   const [kasaOutlets, setKasaOutlets] = useState({});
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  const [lastUpdate, setLastUpdate] = useState(null);
 
   // Fetch USB port status
   const getUsbStatus = async () => {
@@ -83,8 +84,8 @@ function Debug() {
       
       if (result.success) {
         setMessage(result.message);
-        // Refresh Kasa status after a short delay to get updated power readings
-        setTimeout(getKasaStatus, 1000);
+        // Refresh Kasa status after a longer delay to prevent connection spam
+        setTimeout(getKasaStatus, 3000);
       } else {
         setMessage(result.message);
       }
@@ -99,22 +100,25 @@ function Debug() {
     const loadData = async () => {
       setLoading(true);
       await Promise.all([getUsbStatus(), getKasaStatus()]);
+      setLastUpdate(new Date());
       setLoading(false);
     };
     
     loadData();
   }, []);
 
-  // Auto-refresh every 5 seconds for power readings
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (!loading) {
-        getKasaStatus(); // Refresh Kasa status to get updated power readings
-      }
-    }, 5000);
-    
-    return () => clearInterval(interval);
-  }, [loading]);
+  // Auto-refresh removed to prevent connection leaks and unwanted updates
+  // Power readings will only update when manually controlling outlets
+
+  // Manual refresh function
+  const refreshData = async () => {
+    setLoading(true);
+    setMessage('Refreshing data...');
+    await Promise.all([getUsbStatus(), getKasaStatus()]);
+    setLoading(false);
+    setLastUpdate(new Date());
+    setMessage('Data refreshed successfully');
+  };
 
   if (loading) {
     return (
@@ -128,6 +132,30 @@ function Debug() {
   return (
     <div className="debug-container">
       <h1>Debug Control Panel</h1>
+      
+      <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+        <button 
+          onClick={refreshData}
+          disabled={loading}
+          style={{
+            backgroundColor: '#4CAF50',
+            color: 'white',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            fontSize: '16px',
+            fontWeight: 'bold'
+          }}
+        >
+          {loading ? 'Refreshing...' : 'Refresh Data'}
+        </button>
+        {lastUpdate && (
+          <div style={{ marginTop: '10px', color: '#666', fontSize: '14px' }}>
+            Last updated: {lastUpdate.toLocaleTimeString()}
+          </div>
+        )}
+      </div>
       
       {message && (
         <div className="message-box">
@@ -179,41 +207,58 @@ function Debug() {
         <div className="debug-section">
           <h2>Kasa Power Strip</h2>
           <div className="control-grid">
-            {Object.entries(kasaOutlets).map(([outletId, outletData]) => (
-              <div key={outletId} className="control-item">
-                <h3>{outletData.name}</h3>
-                <div className="control-buttons">
-                  <label className="radio-control">
-                    <input
-                      type="radio"
-                      name={`kasa-${outletId}`}
-                      checked={outletData.enabled}
-                      onChange={() => controlKasaOutlet(outletId, 'on')}
-                    />
-                    <span className={`radio-label ${outletData.enabled ? 'active' : ''}`}>
-                      ON
-                    </span>
-                  </label>
-                  <label className="radio-control">
-                    <input
-                      type="radio"
-                      name={`kasa-${outletId}`}
-                      checked={!outletData.enabled}
-                      onChange={() => controlKasaOutlet(outletId, 'off')}
-                    />
-                    <span className={`radio-label ${!outletData.enabled ? 'active' : ''}`}>
-                      OFF
-                    </span>
-                  </label>
+            {Object.entries(kasaOutlets).map(([outletId, outletData]) => {
+              const isOffline = outletData.status && ['offline', 'error', 'system_error', 'comm_error'].includes(outletData.status);
+              const isMockData = outletData.mock || isOffline;
+              
+              return (
+                <div key={outletId} className={`control-item ${isOffline ? 'offline' : ''}`}>
+                  <h3>{outletData.name}</h3>
+                  {isMockData && (
+                    <div className="status-indicator">
+                      {outletData.status === 'offline' && <span className="status-offline">OFFLINE</span>}
+                      {outletData.status === 'error' && <span className="status-error">CONNECTION ERROR</span>}
+                      {outletData.status === 'system_error' && <span className="status-error">SYSTEM ERROR</span>}
+                      {outletData.status === 'comm_error' && <span className="status-error">COMM ERROR</span>}
+                      {outletData.mock && !outletData.status && <span className="status-mock">MOCK DATA</span>}
+                    </div>
+                  )}
+                  <div className="control-buttons">
+                    <label className="radio-control">
+                      <input
+                        type="radio"
+                        name={`kasa-${outletId}`}
+                        checked={outletData.enabled}
+                        onChange={() => !isOffline && controlKasaOutlet(outletId, 'on')}
+                        disabled={isOffline}
+                      />
+                      <span className={`radio-label ${outletData.enabled ? 'active' : ''} ${isOffline ? 'disabled' : ''}`}>
+                        ON
+                      </span>
+                    </label>
+                    <label className="radio-control">
+                      <input
+                        type="radio"
+                        name={`kasa-${outletId}`}
+                        checked={!outletData.enabled}
+                        onChange={() => !isOffline && controlKasaOutlet(outletId, 'off')}
+                        disabled={isOffline}
+                      />
+                      <span className={`radio-label ${!outletData.enabled ? 'active' : ''} ${isOffline ? 'disabled' : ''}`}>
+                        OFF
+                      </span>
+                    </label>
+                  </div>
+                  <div className={`power-display ${isOffline ? 'offline' : ''}`}>
+                    Power: {outletData.power_watts}W
+                    {isMockData && <span className="mock-indicator"> (simulated)</span>}
+                  </div>
+                  {outletData.error && (
+                    <div className="error-text">{outletData.error}</div>
+                  )}
                 </div>
-                <div className="power-display">
-                  Power: {outletData.power_watts}W
-                </div>
-                {outletData.error && (
-                  <div className="error-text">{outletData.error}</div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

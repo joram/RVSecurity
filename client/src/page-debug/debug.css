@@ -192,3 +192,66 @@
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+/* Offline and status indicators */
+.control-item.offline {
+  background-color: #f8f8f8;
+  border: 2px dashed #ccc;
+  opacity: 0.7;
+}
+
+.status-indicator {
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.status-offline {
+  background-color: #95a5a6;
+  color: white;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.8em;
+  font-weight: bold;
+}
+
+.status-error {
+  background-color: #e74c3c;
+  color: white;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.8em;
+  font-weight: bold;
+}
+
+.status-mock {
+  background-color: #f39c12;
+  color: white;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.8em;
+  font-weight: bold;
+}
+
+.radio-label.disabled {
+  background-color: #ecf0f1;
+  color: #bdc3c7;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.radio-label.disabled:hover {
+  background-color: #ecf0f1;
+  transform: none;
+}
+
+.power-display.offline {
+  background-color: #ecf0f1;
+  color: #7f8c8d;
+  border-color: #bdc3c7;
+}
+
+.mock-indicator {
+  font-size: 0.8em;
+  color: #7f8c8d;
+  font-style: italic;
+}
