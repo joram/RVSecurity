@@ -721,12 +721,12 @@ class DataResponse(BaseModel):
     var10: str
     var11: str
     var12: str
-    var13: int  # Gray tank percentage
-    var14: int  # Black tank percentage
+    var13: str
+    var14: str
     var15: str
     var16: str
-    var17: int  # Fresh tank percentage
-    var18: int  # Propane tank percentage
+    var17: str
+    var18: str
     var19: str
     var20: str
     battery_percent: float
@@ -829,12 +829,12 @@ def data()-> DataResponse:  # Removed async
         var10= '60? psi',    # RF
         var11= 'not used',  
         var12= str('%.0f' % max(Invert_AC_power, .8 * (Invert_DC_power)) + " Watts"),      #note: .8 is efficiency estimate of inverter
-        var13= Tank_Gray,
-        var14= Tank_Black,
+        var13= str(Tank_Gray),   # Send as string, client will convert to number
+        var14= str(Tank_Black),  # Send as string, client will convert to number
         var15= Batt_Hours_Remaining_str,
         var16= 'Status: ' + Batt_status_str,
-        var17= Tank_Fresh,
-        var18= Tank_Propane,
+        var17= str(Tank_Fresh),  # Send as string, client will convert to number
+        var18= str(Tank_Propane), # Send as string, client will convert to number
         var19= str('%.0f' % Batt_Power) + " Watts",
         battery_percent= Batt_Charge,
         var20= Time_Str,
