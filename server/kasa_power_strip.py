@@ -4,6 +4,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 import time
 from typing import Dict, List, Optional, Union
@@ -58,8 +59,17 @@ class KasaPowerStrip:
             KasaPowerStripError: If command fails or times out
         """
         try:
-            # Build the full command
-            cmd = ['kasa', '--host', self.host]
+            # Build the full command - use full path to kasa CLI if available
+            kasa_cmd = shutil.which('kasa')
+            if not kasa_cmd:
+                # Try the virtual environment path
+                venv_kasa = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'venv', 'bin', 'kasa')
+                if os.path.exists(venv_kasa):
+                    kasa_cmd = venv_kasa
+                else:
+                    kasa_cmd = 'kasa'  # fallback to PATH lookup
+            
+            cmd = [kasa_cmd, '--host', self.host]
             if use_json:
                 cmd.append('--json')
             cmd.extend(command_args)
@@ -70,7 +80,9 @@ class KasaPowerStrip:
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
-                check=True
+                check=True,
+                encoding='utf-8',
+                errors='replace'  # Replace problematic characters instead of failing
             )
             
             # Parse JSON output
@@ -106,7 +118,7 @@ class KasaPowerStrip:
         Raises:
             KasaPowerStripError: If connection fails
         """
-        print(f"🎯 Connecting to Kasa device at {self.host}...")
+        print(f"Connecting to Kasa device at {self.host}...")
         
         try:
             # Get device state which also tests connectivity
@@ -123,13 +135,13 @@ class KasaPowerStrip:
             outlet_count = len(children)
             device_alias = system_info.get('alias', 'Unknown Device')
             
-            print(f"✅ Connected! Found {outlet_count} outlets")
-            print(f"📱 Device: {device_alias}")
+            print(f"SUCCESS: Connected! Found {outlet_count} outlets")
+            print(f"Device: {device_alias}")
             
             # Print outlet summary
             for i, child in enumerate(children):
                 alias = child.get('alias', f'Outlet {i}')
-                state = '🟢 ON' if child.get('state', 0) == 1 else '🔴 OFF'
+                state = 'ON' if child.get('state', 0) == 1 else 'OFF'
                 print(f"   Outlet {i}: {alias} - {state}")
             
             return True
@@ -154,9 +166,19 @@ class KasaPowerStrip:
         
         outlets = []
         for i, child in enumerate(children):
+            # Sanitize alias to remove problematic Unicode characters
+            raw_alias = child.get('alias', f'Outlet {i}')
+            try:
+                # Try to encode/decode to clean up any problematic characters
+                clean_alias = raw_alias.encode('ascii', errors='ignore').decode('ascii').strip()
+                if not clean_alias:  # If nothing left after sanitization, use default
+                    clean_alias = f'Outlet {i+1}'
+            except:
+                clean_alias = f'Outlet {i+1}'
+                
             outlets.append({
                 'outlet_id': i,
-                'alias': child.get('alias', f'Outlet {i}').strip(),
+                'alias': clean_alias,
                 'is_on': child.get('state', 0) == 1,
                 'device_id': child.get('id', f'outlet_{i}')
             })
@@ -205,7 +227,7 @@ class KasaPowerStrip:
         # Use kasa CLI to turn on the specific child device
         try:
             self._run_kasa_command(['device', '--child-index', str(outlet_id), 'on'], use_json=False)
-            print(f"✅ Turned ON outlet {outlet_id} ({outlets[outlet_id]['alias']})")
+            print(f"SUCCESS: Turned ON outlet {outlet_id} ({outlets[outlet_id]['alias']})")
             return True
         except Exception as e:
             raise KasaPowerStripError(f"Failed to turn on outlet {outlet_id}: {e}")
@@ -232,7 +254,7 @@ class KasaPowerStrip:
         # Use kasa CLI to turn off the specific child device
         try:
             self._run_kasa_command(['device', '--child-index', str(outlet_id), 'off'], use_json=False)
-            print(f"⭕ Turned OFF outlet {outlet_id} ({outlets[outlet_id]['alias']})")
+            print(f"SUCCESS: Turned OFF outlet {outlet_id} ({outlets[outlet_id]['alias']})")
             return True
         except Exception as e:
             raise KasaPowerStripError(f"Failed to turn off outlet {outlet_id}: {e}")
@@ -366,7 +388,7 @@ class KasaPowerStrip:
                         self.turn_on_outlet(outlet_id)
                     
                     results[outlet_id] = True
-                    print(f"✅ Outlet {outlet_id} test passed")
+                    print(f"SUCCESS: Outlet {outlet_id} test passed")
                     
                 except Exception as e:
                     results[outlet_id] = False
@@ -383,7 +405,7 @@ class KasaPowerStrip:
 # Convenience functions for quick testing
 def quick_test(host: Optional[str] = None):
     """Quick test function to verify device connectivity and basic operations."""
-    print("🚀 Starting Kasa Power Strip Quick Test...")
+    print("Starting Kasa Power Strip Quick Test...")
     
     try:
         kasa = KasaPowerStrip(host)
@@ -395,7 +417,7 @@ def quick_test(host: Optional[str] = None):
             state = '🟢 ON' if outlet['is_on'] else '🔴 OFF'
             print(f"  {outlet['outlet_id']}: {outlet['alias']} - {state}")
         
-        print("\n✅ Quick test completed successfully!")
+        print("\nSUCCESS: Quick test completed successfully!")
         return True
         
     except Exception as e:

@@ -8,6 +8,7 @@ import sys
 import time
 import socket
 import requests
+from pythonping import ping
 #import alarm
 #import MQTTClient
 import rvglue
@@ -43,6 +44,7 @@ app.add_middleware(
 @app.get("/power")
 @app.get("/wifi")
 @app.get("/internet")
+@app.get("/debug")
 async def index():
     return Response(index_content)
 
@@ -333,6 +335,8 @@ class InternetResponse(BaseModel):
 _kasa_strip_cache = None
 _kasa_cache_time = 0
 _kasa_cache_duration = 300  # Cache for 5 minutes
+_kasa_last_failure_time = 0
+_kasa_failure_cache_duration = 60  # Cache failures for 1 minute to prevent spam
 
 def get_kasa_power_strip():
     """Get Kasa Power Strip Controller instance. Returns None if not available."""
@@ -350,7 +354,7 @@ def get_kasa_power_strip():
     current_time = time.time()
     if (_kasa_strip_cache is not None and 
         (current_time - _kasa_cache_time) < _kasa_cache_duration):
-        # Removed noisy log message - cache usage is normal behavior
+        # Cache is still valid, return cached instance
         return _kasa_strip_cache
     
     # Cache is invalid or doesn't exist, try to create new connection
@@ -367,12 +371,16 @@ def get_kasa_power_strip():
         else:
             print("WARNING: No Kasa power strip found or connection failed")
             print("INFO: Set DISABLE_KASA=true environment variable to disable Kasa functionality")
+            # Cache the failure for a shorter period to avoid repeated connection attempts
             _kasa_strip_cache = None
+            _kasa_cache_time = current_time  # Cache the failure attempt
             return None
     except Exception as e:
         print(f"WARNING: Kasa power strip controller not available: {e}")
         print("INFO: Set DISABLE_KASA=true environment variable to disable Kasa functionality")
+        # Cache the failure for a shorter period to avoid repeated connection attempts
         _kasa_strip_cache = None
+        _kasa_cache_time = current_time  # Cache the failure attempt
         return None
 
 def clear_kasa_cache():
@@ -421,56 +429,26 @@ def get_usb_hub_controller():
         print(f"Error initializing USB hub: {e}")
         return None
 
-def test_internet_connectivity(connection_type="generic", timeout=10):
-    """Test internet connectivity using multiple methods."""
+def test_internet_connectivity(connection_type="generic", timeout=5):
+    """Test internet connectivity using pythonping to 8.8.8.8."""
     test_results = {
-        'dns_test': False,
-        'http_test': False,
-        'ping_test': False,
         'connected': False,
         'message': 'Testing...'
     }
     
     try:
-        # Test 1: DNS resolution
-        try:
-            socket.getaddrinfo('google.com', 443, socket.AF_UNSPEC, socket.SOCK_STREAM)
-            test_results['dns_test'] = True
-        except (socket.gaierror, OSError):
-            pass
+        # Ping test using pythonping - single ping for speed
+        response = ping('8.8.8.8', count=1, timeout=timeout)
         
-        # Test 2: HTTP request
-        try:
-            response = requests.get('http://google.com', timeout=timeout)
-            if response.status_code == 200 or 300 <= response.status_code < 400:
-                test_results['http_test'] = True
-        except requests.RequestException:
-            pass
-        
-        # Test 3: Ping test using subprocess
-        try:
-            result = subprocess.run(['ping', '-c', '3', '-W', str(timeout), '8.8.8.8'], 
-                                    capture_output=True, text=True, timeout=timeout+5)
-            if result.returncode == 0:
-                test_results['ping_test'] = True
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
-        
-        # Determine overall connectivity
-        if test_results['dns_test'] and test_results['http_test']:
+        if response.success():
             test_results['connected'] = True
             test_results['message'] = f'Internet connectivity verified via {connection_type}'
-        elif test_results['ping_test']:
-            test_results['connected'] = True
-            test_results['message'] = f'Basic connectivity verified via {connection_type} (ping only)'
-        elif test_results['dns_test']:
-            test_results['connected'] = False
-            test_results['message'] = f'DNS works but HTTP failed via {connection_type}'
         else:
             test_results['connected'] = False
             test_results['message'] = f'No internet connectivity detected via {connection_type}'
             
     except Exception as e:
+        test_results['connected'] = False
         test_results['message'] = f'Connectivity test failed: {str(e)}'
     
     return test_results
@@ -551,155 +529,43 @@ def internet_power_control(data: Annotated[InternetPowerData, Body()]) -> Intern
         except Exception as e:
             print(f"WARNING: Failed to get Kasa power strip: {e}")
         
-                # Handle mutual exclusion and multiple Kasa port control
-        if data.port == 0 or (data.connection_type and data.connection_type == 'none'):  # "None" selection - turn off both Kasa ports 1 and 6
-            if kasa_strip:
-                try:
-                    # Turn off port 1 (cellular amp)
-                    result1 = kasa_strip.turn_off_outlet(0)  # Convert to 0-based indexing (port 1 -> index 0)
-                    if result1:
-                        print(f"INFO: Kasa power strip port 1 (cellular amp) turned off")
+        # Simple Kasa power control logic based on connection_type
+        if kasa_strip:
+            try:
+                # Always manage both Kasa ports based on connection_type
+                connection_type = data.connection_type or "none"
+                
+                # Kasa Port 1 (Cellular Amp): Only ON when cellular-amp is selected
+                if connection_type == 'cellular-amp':
+                    result1 = kasa_strip.turn_on_outlet(0)  # Convert to 0-based indexing (port 1 -> index 0)
+                    print(f"INFO: Kasa port 1 (cellular amp) turned ON for cellular-amp")
+                else:
+                    result1 = kasa_strip.turn_off_outlet(0)
+                    print(f"INFO: Kasa port 1 (cellular amp) turned OFF (connection: {connection_type})")
+                
+                # Kasa Port 6 (Starlink): Only ON when starlink is selected
+                if connection_type == 'starlink':
+                    result6 = kasa_strip.turn_on_outlet(5)  # Convert to 0-based indexing (port 6 -> index 5)
+                    print(f"INFO: Kasa port 6 (starlink) turned ON for starlink")
+                else:
+                    result6 = kasa_strip.turn_off_outlet(5)
+                    print(f"INFO: Kasa port 6 (starlink) turned OFF (connection: {connection_type})")
+                
+                # Build status message
+                if connection_type == 'cellular-amp':
+                    kasa_message = ", Kasa: port 1 ON, port 6 OFF"
+                elif connection_type == 'starlink':
+                    kasa_message = ", Kasa: port 1 OFF, port 6 ON"
+                else:
+                    kasa_message = ", Kasa: both ports OFF"
                     
-                    # Turn off port 6 (starlink)
-                    result6 = kasa_strip.turn_off_outlet(5)  # Convert to 0-based indexing (port 6 -> index 5)
-                    if result6:
-                        print(f"INFO: Kasa power strip port 6 (starlink) turned off")
-                    
-                    if result1 and result6:
-                        kasa_message = ", Kasa ports 1 and 6 turned off"
-                    elif result1 or result6:
-                        kasa_message = f", Kasa port {'1' if result1 else '6'} turned off"
-                    else:
-                        kasa_success = False
-                        kasa_message = ", Failed to turn off Kasa ports"
-                        
-                except Exception as e:
-                    print(f"WARNING: Kasa power strip operation failed: {e}")
-                    clear_kasa_cache()
-                    kasa_success = False
-                    kasa_message = f", Kasa control failed: {str(e)}"
-        
-        elif (data.port == 3 and data.action.lower() == 'on') or (data.connection_type == 'starlink' and data.action.lower() == 'on'):  # Starlink selected - turn off cellular amp (port 1)
-            if kasa_strip:
-                try:
-                    # Turn off port 1 (cellular amp)
-                    result1 = kasa_strip.turn_off_outlet(0)  # Convert to 0-based indexing
-                    if result1:
-                        print(f"INFO: Kasa power strip port 1 (cellular amp) turned off for Starlink")
-                        
-                    # Turn on port 6 (starlink) if specified
-                    if data.kasaPort == 6:
-                        result6 = kasa_strip.turn_on_outlet(5)  # Convert to 0-based indexing
-                        if result6:
-                            print(f"INFO: Kasa power strip port 6 (starlink) turned on")
-                            kasa_message = ", Kasa port 1 off, port 6 on"
-                        else:
-                            kasa_message = ", Kasa port 1 off, port 6 failed"
-                    else:
-                        kasa_message = ", Kasa port 1 (cellular amp) turned off"
-                        
-                except Exception as e:
-                    print(f"WARNING: Kasa power strip operation failed: {e}")
-                    clear_kasa_cache()
-                    kasa_success = False
-                    kasa_message = f", Kasa control failed: {str(e)}"
-        
-        elif ((data.port == 1 and data.action.lower() == 'on' and data.kasaPort == 1) or 
-              (data.connection_type == 'cellular-amp' and data.action.lower() == 'on')):  # Cellular-amp selected - turn off starlink (port 6)
-            if kasa_strip:
-                try:
-                    # Turn off port 6 (starlink)
-                    result6 = kasa_strip.turn_off_outlet(5)  # Convert to 0-based indexing
-                    if result6:
-                        print(f"INFO: Kasa power strip port 6 (starlink) turned off for Cellular + Amp")
-                        
-                    # Turn on port 1 (cellular amp)
-                    result1 = kasa_strip.turn_on_outlet(0)  # Convert to 0-based indexing
-                    if result1:
-                        print(f"INFO: Kasa power strip port 1 (cellular amp) turned on")
-                        kasa_message = ", Kasa port 6 off, port 1 on"
-                    else:
-                        kasa_message = ", Kasa port 6 off, port 1 failed"
-                        
-                except Exception as e:
-                    print(f"WARNING: Kasa power strip operation failed: {e}")
-                    clear_kasa_cache()
-                    kasa_success = False
-                    kasa_message = f", Kasa control failed: {str(e)}"
-        
-        elif data.port == 3 and data.action.lower() == 'on':  # Starlink selected - turn off cellular amp (port 1)
-            if kasa_strip:
-                try:
-                    # Turn off port 1 (cellular amp)
-                    result1 = kasa_strip.turn_off_outlet(0)  # Convert to 0-based indexing
-                    if result1:
-                        print(f"INFO: Kasa power strip port 1 (cellular amp) turned off for Starlink")
-                        
-                    # Turn on port 6 (starlink) if specified
-                    if data.kasaPort == 6:
-                        result6 = kasa_strip.turn_on_outlet(5)  # Convert to 0-based indexing
-                        if result6:
-                            print(f"INFO: Kasa power strip port 6 (starlink) turned on")
-                            kasa_message = ", Kasa port 1 off, port 6 on"
-                        else:
-                            kasa_message = ", Kasa port 1 off, port 6 failed"
-                    else:
-                        kasa_message = ", Kasa port 1 (cellular amp) turned off"
-                        
-                except Exception as e:
-                    print(f"WARNING: Kasa power strip operation failed: {e}")
-                    clear_kasa_cache()
-                    kasa_success = False
-                    kasa_message = f", Kasa control failed: {str(e)}"
-        
-        elif data.port == 1 and data.action.lower() == 'on' and data.kasaPort == 1:  # Cellular-amp selected - turn off starlink (port 6)
-            if kasa_strip:
-                try:
-                    # Turn off port 6 (starlink)
-                    result6 = kasa_strip.turn_off_outlet(5)  # Convert to 0-based indexing
-                    if result6:
-                        print(f"INFO: Kasa power strip port 6 (starlink) turned off for Cellular + Amp")
-                        
-                    # Turn on port 1 (cellular amp)
-                    result1 = kasa_strip.turn_on_outlet(0)  # Convert to 0-based indexing
-                    if result1:
-                        print(f"INFO: Kasa power strip port 1 (cellular amp) turned on")
-                        kasa_message = ", Kasa port 6 off, port 1 on"
-                    else:
-                        kasa_message = ", Kasa port 6 off, port 1 failed"
-                        
-                except Exception as e:
-                    print(f"WARNING: Kasa power strip operation failed: {e}")
-                    clear_kasa_cache()
-                    kasa_success = False
-                    kasa_message = f", Kasa control failed: {str(e)}"
-        
-        # Handle regular Kasa power strip control for other cases if specified
-        elif data.kasaPort is not None:
-            if kasa_strip:
-                try:
-                    if data.action.lower() == 'on':
-                        result = kasa_strip.turn_on_outlet(data.kasaPort - 1)  # Convert to 0-based indexing
-                        if not result:
-                            raise Exception("Turn on operation failed")
-                        kasa_message = f", Kasa port {data.kasaPort} turned on"
-                        print(f"INFO: Kasa power strip port {data.kasaPort} turned on")
-                    else:
-                        result = kasa_strip.turn_off_outlet(data.kasaPort - 1)  # Convert to 0-based indexing
-                        if not result:
-                            raise Exception("Turn off operation failed")
-                        kasa_message = f", Kasa port {data.kasaPort} turned off"
-                        print(f"INFO: Kasa power strip port {data.kasaPort} turned off")
-                except Exception as e:
-                    print(f"WARNING: Kasa power strip operation failed: {e}")
-                    clear_kasa_cache()  # Clear cache on error
-                    kasa_success = False
-                    kasa_message = f", Kasa port {data.kasaPort} control failed: {str(e)}"
-            else:
-                print(f"WARNING: Kasa power strip not available for port {data.kasaPort}")
+            except Exception as e:
+                print(f"WARNING: Kasa power strip operation failed: {e}")
+                clear_kasa_cache()
                 kasa_success = False
-                kasa_message = f", Kasa power strip not available"
+                kasa_message = f", Kasa control failed: {str(e)}"
         
+        # USB Hub Control Logic
         if data.port == 0:  # All ports off
             result = hub.all_off()
             if result:
@@ -723,8 +589,8 @@ def internet_power_control(data: Annotated[InternetPowerData, Body()]) -> Intern
                 )
         
         elif 1 <= data.port <= 4:  # Specific port control
-            # Get connection type and appropriate delays for this port
-            connection_type = PORT_TO_CONNECTION_TYPE.get(data.port, 'wired')
+            # Use the connection_type from the request data, or fallback to port mapping
+            connection_type = data.connection_type or PORT_TO_CONNECTION_TYPE.get(data.port, 'wired')
             init_delay = get_connection_init_delay(data.port)
             
             if data.action.lower() == 'on':
@@ -825,8 +691,8 @@ def internet_connectivity_test(data: Annotated[InternetTestData, Body()]) -> Int
         print(f"Applying {data.connection_type} connection settle delay: {settle_delay} seconds")
         time.sleep(settle_delay)
         
-        # Test internet connectivity with extended timeout for connection types that may take longer
-        timeout = 20 if data.connection_type in ['cellular', 'starlink'] else 15
+        # Test internet connectivity with shorter timeout for the simplified ping test
+        timeout = 5  # Fast ping test timeout
         test_results = test_internet_connectivity(data.connection_type, timeout=timeout)
         
         return InternetResponse(
@@ -855,20 +721,21 @@ class DataResponse(BaseModel):
     var10: str
     var11: str
     var12: str
-    var13: str
-    var14: str
+    var13: int  # Gray tank percentage
+    var14: int  # Black tank percentage
     var15: str
     var16: str
-    var17: str
-    var18: str
+    var17: int  # Fresh tank percentage
+    var18: int  # Propane tank percentage
     var19: str
     var20: str
-    battery_percent: int
+    battery_percent: float
 
 
 # This is the POWER page function that is called by the front end client
 @app.get("/data/power")
 def data()-> DataResponse:  # Removed async
+    debug = 0  # Define debug variable
 
     (Charger_AC_power, Charger_AC_voltage, Invert_AC_power, DC_Charger_power, DC_Charger_volts, Invert_DC_power, Invert_status_num)= InvertCalcs()
     (ShorePower, GenPower)= ATS_Calcs()
@@ -913,7 +780,8 @@ def data()-> DataResponse:  # Removed async
 # This is the HOME page function that is called by the front end client
 @app.get("/data/home")
 def data()-> DataResponse:  # Removed async
-
+    debug = 0  # Define debug variable
+    
     (Charger_AC_power, Charger_AC_voltage, Invert_AC_power, DC_Charger_power, DC_Charger_volts, Invert_DC_power, Invert_status_num)= InvertCalcs()
     (ShorePower, GenPower)= ATS_Calcs()
     (SolarPower) = SolcarCalcs()
@@ -924,10 +792,26 @@ def data()-> DataResponse:  # Removed async
     (AC_HeatPump_Load, DC_Load) = LoadCalcs(Invert_status_num, Charger_AC_power, DC_Charger_power, ShorePower, GenPower, Batt_Power, SolarPower, AlternatorPower, Invert_DC_power)
     (RedMsg, YellowMsg, Time_Str) = HouseKeeping()
 
-    Tank_Fresh = round(rvglue.rvglue.AliasData["_var29Tank_Level"]/rvglue.rvglue.AliasData["_var30Tank_Resolution"] * 100 )  
-    Tank_Black = round(rvglue.rvglue.AliasData["_var32Tank_Level"]/rvglue.rvglue.AliasData["_var33Tank_Resolution"] * 100)
-    Tank_Gray = round(rvglue.rvglue.AliasData["_var35Tank_Level"]/rvglue.rvglue.AliasData["_var36Tank_Resolution"] * 100)   
-    Tank_Propane = round(rvglue.rvglue.AliasData["_var38Tank_Level"]/rvglue.rvglue.AliasData["_var39Tank_Resolution"] * 100)  
+    # Tank level calculations with error handling for missing data
+    try:
+        Tank_Fresh = round(rvglue.rvglue.AliasData["_var29Tank_Level"]/rvglue.rvglue.AliasData["_var30Tank_Resolution"] * 100 )  
+    except (KeyError, ZeroDivisionError):
+        Tank_Fresh = 50  # Default value when no data available
+        
+    try:
+        Tank_Black = round(rvglue.rvglue.AliasData["_var32Tank_Level"]/rvglue.rvglue.AliasData["_var33Tank_Resolution"] * 100)
+    except (KeyError, ZeroDivisionError):
+        Tank_Black = 25  # Default value when no data available
+        
+    try:
+        Tank_Gray = round(rvglue.rvglue.AliasData["_var35Tank_Level"]/rvglue.rvglue.AliasData["_var36Tank_Resolution"] * 100)   
+    except (KeyError, ZeroDivisionError):
+        Tank_Gray = 30  # Default value when no data available
+        
+    try:
+        Tank_Propane = round(rvglue.rvglue.AliasData["_var38Tank_Level"]/rvglue.rvglue.AliasData["_var39Tank_Resolution"] * 100)  
+    except (KeyError, ZeroDivisionError):
+        Tank_Propane = 75  # Default value when no data available  
 
     if debug > 0:
         print('invert power= ', round(Invert_AC_power), round(Invert_DC_power*.8))
@@ -956,6 +840,245 @@ def data()-> DataResponse:  # Removed async
         var20= Time_Str,
         
     )
+
+# Debug API endpoints
+@app.get("/api/debug/usb/status")
+def get_usb_debug_status() -> dict:
+    """Get current status of all USB ports for debug interface."""
+    try:
+        hub = get_usb_hub_controller()
+        if not hub:
+            return {
+                "success": False,
+                "message": "USB hub controller not available",
+                "ports": {}
+            }
+        
+        # Get status of all USB ports
+        ports = {}
+        for port_num in range(1, 5):  # USB ports 1-4
+            try:
+                # Get current active port and determine if this specific port is on
+                active_port = hub.get_current_active_port()
+                is_on = (active_port == port_num)
+                connection_type = PORT_TO_CONNECTION_TYPE.get(port_num, 'unknown')
+                ports[port_num] = {
+                    "enabled": is_on,
+                    "connection_type": connection_type,
+                    "name": f"USB Port {port_num} ({connection_type.title()})"
+                }
+            except Exception as e:
+                ports[port_num] = {
+                    "enabled": False,
+                    "connection_type": PORT_TO_CONNECTION_TYPE.get(port_num, 'unknown'),
+                    "name": f"USB Port {port_num} (Error)",
+                    "error": str(e)
+                }
+        
+        return {
+            "success": True,
+            "message": "USB ports status retrieved",
+            "ports": ports
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error getting USB status: {str(e)}",
+            "ports": {}
+        }
+
+@app.post("/api/debug/usb/{port_num}")
+def control_usb_port_debug(port_num: int, data: Annotated[dict, Body()]) -> dict:
+    """Control individual USB port for debug interface."""
+    try:
+        if port_num < 1 or port_num > 4:
+            return {
+                "success": False,
+                "message": f"Invalid port number: {port_num}. Must be 1-4."
+            }
+        
+        action = data.get('action', '').lower()
+        if action not in ['on', 'off']:
+            return {
+                "success": False,
+                "message": f"Invalid action: {action}. Must be 'on' or 'off'."
+            }
+        
+        hub = get_usb_hub_controller()
+        if not hub:
+            return {
+                "success": False,
+                "message": "USB hub controller not available"
+            }
+        
+        # Control the specific port
+        if action == 'on':
+            result = hub.port_on(port_num)
+        else:
+            result = hub.port_off(port_num)
+        
+        if result:
+            connection_type = PORT_TO_CONNECTION_TYPE.get(port_num, 'unknown')
+            return {
+                "success": True,
+                "message": f"USB port {port_num} ({connection_type}) turned {action}",
+                "port": port_num,
+                "action": action
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"Failed to turn {action} USB port {port_num}",
+                "port": port_num,
+                "action": action
+            }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error controlling USB port {port_num}: {str(e)}",
+            "port": port_num
+        }
+
+@app.get("/api/debug/kasa/status")
+def get_kasa_debug_status() -> dict:
+    """Get current status and power consumption of all Kasa outlets for debug interface."""
+    try:
+        kasa_strip = get_kasa_power_strip()
+        if not kasa_strip:
+            # Return mock data when Kasa is not available
+            return {
+                "success": True,
+                "message": "Kasa power strip not available (mock data)",
+                "outlets": {
+                    1: {"enabled": False, "power_watts": 0, "name": "Kasa Outlet 1 (Cellular Amp)", "mock": True},
+                    2: {"enabled": True, "power_watts": 0.1, "name": "Kasa Outlet 2 (TV)", "mock": True},
+                    3: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 3 (Soundbar)", "mock": True},
+                    4: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 4 (Synology)", "mock": True},
+                    5: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 5", "mock": True},
+                    6: {"enabled": False, "power_watts": 0.0, "name": "Kasa Outlet 6 (Starlink)", "mock": True}
+                }
+            }
+        
+        # Get status and power for all outlets (HS300 has 6 outlets)
+        outlets = {}
+        for outlet_id in range(1, 7):  # Kasa outlets 1-6
+            try:
+                # Get outlet status (this gives us the on/off state)
+                status_data = kasa_strip.get_outlet_status(outlet_id - 1)  # Convert to 0-based
+                
+                if 'error' in status_data:
+                    outlets[outlet_id] = {
+                        "enabled": False,
+                        "power_watts": 0,
+                        "name": f"Kasa Outlet {outlet_id}",
+                        "error": status_data['error']
+                    }
+                else:
+                    is_on = status_data.get('is_on', False)
+                    
+                    # Also get power consumption
+                    try:
+                        power_data = kasa_strip.get_power_consumption(outlet_id - 1)
+                        power_watts = power_data.get('power_w', 0) if 'error' not in power_data else 0
+                    except:
+                        power_watts = 0
+                    
+                    outlets[outlet_id] = {
+                        "enabled": is_on,
+                        "power_watts": round(power_watts, 1),
+                        "name": f"Kasa Outlet {outlet_id}"
+                    }
+            except Exception as e:
+                outlets[outlet_id] = {
+                    "enabled": False,
+                    "power_watts": 0,
+                    "name": f"Kasa Outlet {outlet_id} (Error)",
+                    "error": str(e)
+                }
+        
+        return {
+            "success": True,
+            "message": "Kasa outlets status retrieved",
+            "outlets": outlets
+        }
+    except Exception as e:
+        # Return mock data on any error
+        return {
+            "success": True,
+            "message": f"Kasa error (mock data): {str(e)}",
+            "outlets": {
+                1: {"enabled": False, "power_watts": 0, "name": "Kasa Outlet 1 (Cellular Amp)", "mock": True},
+                2: {"enabled": True, "power_watts": 0.1, "name": "Kasa Outlet 2 (TV)", "mock": True},
+                3: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 3 (Soundbar)", "mock": True},
+                4: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 4 (Synology)", "mock": True},
+                5: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 5", "mock": True},
+                6: {"enabled": False, "power_watts": 0.0, "name": "Kasa Outlet 6 (Starlink)", "mock": True}
+            }
+        }
+
+@app.post("/api/debug/kasa/{outlet_id}")
+def control_kasa_outlet_debug(outlet_id: int, data: Annotated[dict, Body()]) -> dict:
+    """Control individual Kasa outlet for debug interface."""
+    try:
+        if outlet_id < 1 or outlet_id > 6:
+            return {
+                "success": False,
+                "message": f"Invalid outlet ID: {outlet_id}. Must be 1-6."
+            }
+        
+        action = data.get('action', '').lower()
+        if action not in ['on', 'off']:
+            return {
+                "success": False,
+                "message": f"Invalid action: {action}. Must be 'on' or 'off'."
+            }
+        
+        kasa_strip = get_kasa_power_strip()
+        if not kasa_strip:
+            # Return mock response when Kasa is not available
+            mock_power = 0.1 if action == 'on' else 0.0
+            return {
+                "success": True,
+                "message": f"Kasa outlet {outlet_id} turned {action} (mock mode)",
+                "outlet": outlet_id,
+                "action": action,
+                "power_watts": mock_power,
+                "mock": True
+            }
+        
+        # Control the specific outlet (convert to 0-based indexing)
+        if action == 'on':
+            result = kasa_strip.turn_on_outlet(outlet_id - 1)
+        else:
+            result = kasa_strip.turn_off_outlet(outlet_id - 1)
+        
+        # Get power consumption after the action (with a small delay)
+        time.sleep(0.5)
+        try:
+            power_data = kasa_strip.get_power_consumption(outlet_id - 1)
+            power_watts = power_data.get('power_w', 0) if 'error' not in power_data else 0
+        except:
+            power_watts = 0
+        
+        return {
+            "success": True,
+            "message": f"Kasa outlet {outlet_id} turned {action}",
+            "outlet": outlet_id,
+            "action": action,
+            "power_watts": round(power_watts, 1)
+        }
+    except Exception as e:
+        # Return mock response on error
+        mock_power = 0.1 if action == 'on' else 0.0
+        return {
+            "success": True,
+            "message": f"Kasa outlet {outlet_id} turned {action} (mock mode - error: {str(e)})",
+            "outlet": outlet_id,
+            "action": action,
+            "power_watts": mock_power,
+            "mock": True,
+            "error": str(e)
+        }
 
 @app.get("/status")
 async def status() -> dict:

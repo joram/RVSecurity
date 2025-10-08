@@ -6,7 +6,7 @@ import './index.css';
 import {IPADDR, PORT} from './constants';
 
 // Import components with error handling
-let Layout, Home, WiFi, Internet, NoPage, Power;
+let Layout, Home, WiFi, Internet, NoPage, Power, Debug;
 
 try {
   Layout = require("./pages/Layout").default;
@@ -15,12 +15,13 @@ try {
   Internet = require("./page-internet/Internet").default;
   NoPage = require("./pages/NoPage").default;
   Power = require("./page-power/Power").default;
+  Debug = require("./page-debug/debug").default;
 } catch (error) {
   console.error("Error importing components:", error);
 }
 
 console.log("Constants:", IPADDR, PORT)
-console.log("Components loaded:", {Layout, Home, WiFi, Internet, NoPage, Power});
+console.log("Components loaded:", {Layout, Home, WiFi, Internet, NoPage, Power, Debug});
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
             <Route path="wifi" element={WiFi ? <WiFi /> : <div>WiFi not loaded</div>} />
             <Route path="internet" element={Internet ? <Internet /> : <div>Internet not loaded</div>} />
             <Route path="power" element={Power ? <Power /> : <div>Power not loaded</div>}/>
+            <Route path="debug" element={Debug ? <Debug /> : <div>Debug not loaded</div>}/>
             <Route path="*" element={NoPage ? <NoPage /> : <div>NoPage not loaded</div>} />
           </Route>
         </Routes>

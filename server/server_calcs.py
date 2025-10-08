@@ -132,7 +132,7 @@ def BatteryCalcs(debug):
     #   12V battery system => 12V * 250 Amp-Hr = 3000 Watt-Hr battery capacity
 
     try:
-        Batt_Charge = safe_float(AliasData.get("_var20Batt_charge", 10))                                    #Battery % charged"
+        Batt_Charge = safe_float(AliasData.get("_var20Batt_charge"))                                     #Battery % charged"
         Batt_Current = safe_int(AliasData.get("_var19Batt_current", 0))                                  #Battery current
         Batt_Voltage = safe_float(AliasData.get("_var18Batt_voltage", 12.5))                                #Battery voltage"  TODO which DC voltage to use???
     except:
