@@ -1,22 +1,48 @@
-.wifi-page {
+.plex-svr-page {
   padding: 20px;
   min-height: 100vh;
   background-color: #d3dff7; /* Same blue background as Home page */
 }
 
+.plex-svr-page .ui.container {
+  max-width: 600px !important;
+  margin-top: 30px;
+}
+
+.plex-svr-page .ui.segment {
+  padding: 30px !important;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important;
+  border-radius: 8px !important;
+  background: white !important;
+}
+
+.plex-svr-page .ui.form .field {
+  margin-bottom: 1.2rem !important;
+}
+
+.plex-svr-page .ui.radio.checkbox {
+  font-size: 1.1rem;
+}
+
+.plex-svr-page .ui.radio.checkbox label {
+  padding-left: 2rem !important;
+  color: #333 !important;
+  font-weight: 500;
+}
+
 /* Container is now handled by inline styles for better control */
 
-.wifi-page .wifi-form-card,
-.wifi-page .wifi-output-card {
+.plex-svr-page .plex-svr-form-card,
+.plex-svr-page .plex-svr-output-card {
   box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important;
   border-radius: 8px !important;
 }
 
-.wifi-page .wifi-form-card {
+.plex-svr-page .plex-svr-form-card {
   background: white !important;
 }
 
-.wifi-page .wifi-output-card {
+.plex-svr-page .plex-svr-output-card {
   background: white !important;
 }
 
@@ -54,7 +80,7 @@
 
 /* Responsive design */
 @media (max-width: 768px) {
-  .wifi-page {
+  .plex-svr-page {
     padding: 10px;
   }
   
@@ -68,30 +94,30 @@
   }
   
   /* Make cards full width on mobile */
-  .wifi-page .wifi-form-card,
-  .wifi-page .wifi-output-card {
+  .plex-svr-page .plex-svr-form-card,
+  .plex-svr-page .plex-svr-output-card {
     margin: 0 !important;
   }
 }
 
 /* Extra small phones */
 @media (max-width: 480px) {
-  .wifi-page {
+  .plex-svr-page {
     padding: 5px;
   }
   
   /* Smaller text on very small screens */
-  .wifi-page .ui.header {
+  .plex-svr-page .ui.header {
     font-size: 1.2rem !important;
   }
   
-  .wifi-page .ui.header .sub.header {
+  .plex-svr-page .ui.header .sub.header {
     font-size: 0.9rem !important;
   }
 }
 
 /* Loading state styling */
-.wifi-form-card.loading {
+.plex-svr-form-card.loading {
   opacity: 0.7;
 }
 

@@ -8,6 +8,11 @@ api/build/
 app/package-lock.json
 app/package.json
 
+# Synology NAS Configuration (contains credentials)
+synology_nas_config.json
+synology_nas_config.*.json
+**/synology_nas_config.json
+
 
 
 # C extensions
@@ -139,3 +144,8 @@ dmypy.json
 #project specific stuff
 server/constants.json
 client/package-lock.json
+
+# Synology NAS configuration (contains sensitive credentials)
+synology_nas_config.json
+server/synology_nas_config.json
+**/synology_nas_config.json

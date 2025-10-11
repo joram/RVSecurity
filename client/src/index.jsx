@@ -6,12 +6,12 @@ import './index.css';
 import {IPADDR, PORT} from './constants';
 
 // Import components with error handling
-let Layout, Home, WiFi, Internet, NoPage, Power, Debug;
+let Layout, Home, PlexSvr, Internet, NoPage, Power, Debug;
 
 try {
   Layout = require("./pages/Layout").default;
   Home = require("./page-home/Home").default;
-  WiFi = require("./page-wifi/WiFi").default;
+  PlexSvr = require("./page-Plex-Svr/PlexSvr").default;
   Internet = require("./page-internet/Internet").default;
   NoPage = require("./pages/NoPage").default;
   Power = require("./page-power/Power").default;
@@ -21,7 +21,7 @@ try {
 }
 
 console.log("Constants:", IPADDR, PORT)
-console.log("Components loaded:", {Layout, Home, WiFi, Internet, NoPage, Power, Debug});
+console.log("Components loaded:", {Layout, Home, PlexSvr, Internet, NoPage, Power, Debug});
 
 export default function App() {
   return (
@@ -31,7 +31,7 @@ export default function App() {
           <Route path="/" element={Layout ? <Layout /> : <div>Layout not loaded</div>}>
             <Route index element={Home ? <Home /> : <div>Home not loaded</div>} />
             <Route path="/index.html" element={Home ? <Home /> : <div>Home not loaded</div>} />
-            <Route path="wifi" element={WiFi ? <WiFi /> : <div>WiFi not loaded</div>} />
+            <Route path="wifi" element={PlexSvr ? <PlexSvr /> : <div>PlexSvr not loaded</div>} />
             <Route path="internet" element={Internet ? <Internet /> : <div>Internet not loaded</div>} />
             <Route path="power" element={Power ? <Power /> : <div>Power not loaded</div>}/>
             <Route path="debug" element={Debug ? <Debug /> : <div>Debug not loaded</div>}/>
