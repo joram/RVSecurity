@@ -6,8 +6,9 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 
 
 class KasaPowerStripError(Exception):
@@ -124,9 +125,12 @@ class KasaPowerStrip:
         except Exception as e:
             raise KasaPowerStripError(f"Unexpected error running kasa command: {e}")
     
-    def connect(self) -> bool:
+    def connect(self, verbose: bool = True) -> bool:
         """
         Connect to the power strip and get device information.
+        
+        Args:
+            verbose: Whether to print connection details
         
         Returns:
             True if connection successful
@@ -134,7 +138,8 @@ class KasaPowerStrip:
         Raises:
             KasaPowerStripError: If connection fails
         """
-        print(f"Connecting to Kasa device at {self.host}...")
+        if verbose:
+            print(f"Connecting to Kasa device at {self.host}...")
         
         try:
             # Get device state which also tests connectivity
@@ -151,14 +156,15 @@ class KasaPowerStrip:
             outlet_count = len(children)
             device_alias = system_info.get('alias', 'Unknown Device')
             
-            print(f"SUCCESS: Connected! Found {outlet_count} outlets")
-            print(f"Device: {device_alias}")
-            
-            # Print outlet summary
-            for i, child in enumerate(children):
-                alias = child.get('alias', f'Outlet {i}')
-                state = 'ON' if child.get('state', 0) == 1 else 'OFF'
-                print(f"   Outlet {i}: {alias} - {state}")
+            if verbose:
+                print(f"SUCCESS: Connected! Found {outlet_count} outlets")
+                print(f"Device: {device_alias}")
+                
+                # Print outlet summary
+                for i, child in enumerate(children):
+                    alias = child.get('alias', f'Outlet {i}')
+                    state = 'ON' if child.get('state', 0) == 1 else 'OFF'
+                    print(f"   Outlet {i}: {alias} - {state}")
             
             return True
             
@@ -173,7 +179,7 @@ class KasaPowerStrip:
             List of dictionaries containing outlet information
         """
         if not self.device_info:
-            self.connect()
+            self.connect(verbose=False)
         
         # Refresh device state
         current_state = self._run_kasa_command(['state'])
@@ -235,18 +241,22 @@ class KasaPowerStrip:
             ValueError: If outlet_id is invalid
             KasaPowerStripError: If command fails
         """
-        # Verify outlet exists
-        outlets = self.get_all_outlet_status()
-        if not 0 <= outlet_id < len(outlets):
-            raise ValueError(f"Outlet ID must be between 0 and {len(outlets) - 1}")
+        # Basic validation without expensive network call
+        if not 0 <= outlet_id <= 5:  # HS300 has 6 outlets (0-5)
+            raise ValueError(f"Outlet ID must be between 0 and 5")
         
-        # Use kasa CLI to turn on the specific child device
+        # Use kasa CLI to turn on the specific child device directly
         try:
             self._run_kasa_command(['device', '--child-index', str(outlet_id), 'on'], use_json=False)
-            print(f"SUCCESS: Turned ON outlet {outlet_id} ({outlets[outlet_id]['alias']})")
+            print(f"SUCCESS: Turned ON port {outlet_id + 1}")
             return True
         except Exception as e:
-            raise KasaPowerStripError(f"Failed to turn on outlet {outlet_id}: {e}")
+            # If it fails, it might be because outlet doesn't exist or network issue
+            error_msg = str(e)
+            if "child" in error_msg.lower() or "index" in error_msg.lower():
+                raise ValueError(f"Invalid outlet ID {outlet_id} - outlet may not exist")
+            else:
+                raise KasaPowerStripError(f"Failed to turn on outlet {outlet_id}: {e}")
     
     def turn_off_outlet(self, outlet_id: int) -> bool:
         """
@@ -262,18 +272,22 @@ class KasaPowerStrip:
             ValueError: If outlet_id is invalid
             KasaPowerStripError: If command fails
         """
-        # Verify outlet exists
-        outlets = self.get_all_outlet_status()
-        if not 0 <= outlet_id < len(outlets):
-            raise ValueError(f"Outlet ID must be between 0 and {len(outlets) - 1}")
+        # Basic validation without expensive network call
+        if not 0 <= outlet_id <= 5:  # HS300 has 6 outlets (0-5)
+            raise ValueError(f"Outlet ID must be between 0 and 5")
         
-        # Use kasa CLI to turn off the specific child device
+        # Use kasa CLI to turn off the specific child device directly
         try:
             self._run_kasa_command(['device', '--child-index', str(outlet_id), 'off'], use_json=False)
-            print(f"SUCCESS: Turned OFF outlet {outlet_id} ({outlets[outlet_id]['alias']})")
+            print(f"SUCCESS: Turned OFF port {outlet_id + 1}")
             return True
         except Exception as e:
-            raise KasaPowerStripError(f"Failed to turn off outlet {outlet_id}: {e}")
+            # If it fails, it might be because outlet doesn't exist or network issue
+            error_msg = str(e)
+            if "child" in error_msg.lower() or "index" in error_msg.lower():
+                raise ValueError(f"Invalid outlet ID {outlet_id} - outlet may not exist")
+            else:
+                raise KasaPowerStripError(f"Failed to turn off outlet {outlet_id}: {e}")
     
     def toggle_outlet(self, outlet_id: int) -> bool:
         """
@@ -295,6 +309,82 @@ class KasaPowerStrip:
             return self.turn_off_outlet(outlet_id)
         else:
             return self.turn_on_outlet(outlet_id)
+    
+    def get_all_outlet_status_with_power(self) -> Tuple[List[Dict[str, Union[int, str, bool, float]]], float]:
+        """
+        Get status and power consumption of all outlets in a single call.
+        
+        Returns:
+            Tuple of (outlets_list, total_power)
+        """
+        # Get device state text output - contains both status and power info
+        device_state = self._run_kasa_command(['state'], use_json=False)
+        output = device_state.get('output', '')
+        lines = output.split('\n')
+        
+        outlets = []
+        power_data = {}
+        total_power = 0
+        current_outlet_index = -1
+        current_outlet_alias = ""
+        current_outlet_state = False
+        in_child_section = False
+        
+        for line in lines:
+            line = line.strip()
+            
+            # Check if this line starts a new child device section
+            if line.startswith('== ') and '(Socket for HS300' in line:
+                current_outlet_index += 1
+                in_child_section = True
+                # Extract alias from the header line
+                # Format: "== Outlet Name (Socket for HS300(..."
+                if ' (' in line:
+                    current_outlet_alias = line.split(' (')[0].replace('== ', '')
+                else:
+                    current_outlet_alias = f'Outlet {current_outlet_index + 1}'
+                continue
+            
+            # Look for device state in child sections
+            if in_child_section and 'State (state):' in line:
+                state_str = line.split(':')[-1].strip()
+                current_outlet_state = (state_str.lower() == 'true')
+                continue
+            
+            # Look for current consumption lines
+            if 'Current consumption (current_consumption):' in line:
+                try:
+                    power_str = line.split(':')[-1].strip()
+                    power_value = float(power_str.split()[0])
+                    
+                    if in_child_section and current_outlet_index >= 0:
+                        # Store power data and create outlet record
+                        power_data[current_outlet_index] = power_value
+                        
+                        # Clean up alias
+                        try:
+                            clean_alias = current_outlet_alias.encode('ascii', errors='ignore').decode('ascii').strip()
+                            if not clean_alias:
+                                clean_alias = f'Outlet {current_outlet_index + 1}'
+                        except:
+                            clean_alias = f'Outlet {current_outlet_index + 1}'
+                        
+                        outlets.append({
+                            'outlet_id': current_outlet_index,
+                            'alias': clean_alias,
+                            'is_on': current_outlet_state,
+                            'device_id': f'outlet_{current_outlet_index}',
+                            'power_w': power_value
+                        })
+                        
+                        in_child_section = False
+                    elif not line.startswith('        '):
+                        # This is the main device total (not indented)
+                        total_power = power_value
+                except (ValueError, IndexError):
+                    continue
+        
+        return outlets, total_power
     
     def get_power_consumption(self, outlet_id: Optional[int] = None) -> Dict:
         """
@@ -332,7 +422,7 @@ class KasaPowerStrip:
                             power_value = float(power_str.split()[0])  # Get "13.0"
                             return {"power_w": power_value, "outlet_id": outlet_id}
                         except (ValueError, IndexError) as e:
-                            print(f"⚠️  Error parsing power for outlet {outlet_id}: {e}")
+                            print(f"WARNING: Error parsing power for outlet {outlet_id}: {e}")
                             continue
                 
                 # If we couldn't find the outlet or its power data
@@ -355,7 +445,7 @@ class KasaPowerStrip:
                 return {"error": "Could not parse total power consumption", "power_w": 0}
             
         except Exception as e:
-            print(f"⚠️  Power consumption data not available: {e}")
+            print(f"WARNING: Power consumption data not available: {e}")
             return {"error": str(e), "power_w": 0}
     
     def get_device_info(self) -> Dict:
@@ -366,9 +456,22 @@ class KasaPowerStrip:
             Dictionary containing device details
         """
         if not self.device_info:
-            self.connect()
+            self.connect(verbose=False)
         
         return self.device_info
+    
+    def test_connectivity(self) -> bool:
+        """
+        Test connectivity to the device without verbose output.
+        
+        Returns:
+            True if device responds, False otherwise
+        """
+        try:
+            self._run_kasa_command(['state'])
+            return True
+        except Exception:
+            return False
     
     def test_all_outlets(self, delay_seconds: float = 2.0) -> Dict[int, bool]:
         """
@@ -380,7 +483,7 @@ class KasaPowerStrip:
         Returns:
             Dictionary mapping outlet_id to success status
         """
-        print("🧪 Starting outlet test sequence...")
+        print("Starting outlet test sequence...")
         results = {}
         
         try:
@@ -388,7 +491,7 @@ class KasaPowerStrip:
             original_states = {i: outlet['is_on'] for i, outlet in enumerate(outlets)}
             
             for outlet_id in range(len(outlets)):
-                print(f"\n🔌 Testing outlet {outlet_id} ({outlets[outlet_id]['alias']})...")
+                print(f"\nTesting outlet {outlet_id} ({outlets[outlet_id]['alias']})...")
                 
                 try:
                     # Turn on
@@ -408,13 +511,13 @@ class KasaPowerStrip:
                     
                 except Exception as e:
                     results[outlet_id] = False
-                    print(f"❌ Outlet {outlet_id} test failed: {e}")
+                    print(f"ERROR: Outlet {outlet_id} test failed: {e}")
             
-            print(f"\n🏁 Test complete! {sum(results.values())}/{len(results)} outlets passed")
+            print(f"\nTest complete! {sum(results.values())}/{len(results)} outlets passed")
             return results
             
         except Exception as e:
-            print(f"❌ Test sequence failed: {e}")
+            print(f"ERROR: Test sequence failed: {e}")
             return {}
 
 
@@ -427,32 +530,139 @@ def quick_test(host: Optional[str] = None):
         kasa = KasaPowerStrip(host)
         kasa.connect()
         
-        print("\n📊 Current outlet status:")
+        print("\nCurrent outlet status:")
         outlets = kasa.get_all_outlet_status()
         for outlet in outlets:
-            state = '🟢 ON' if outlet['is_on'] else '🔴 OFF'
+            state = 'ON' if outlet['is_on'] else 'OFF'
             print(f"  {outlet['outlet_id']}: {outlet['alias']} - {state}")
         
         print("\nSUCCESS: Quick test completed successfully!")
         return True
         
     except Exception as e:
-        print(f"❌ Quick test failed: {e}")
+        print(f"ERROR: Quick test failed: {e}")
         return False
 
 
 if __name__ == "__main__":
-    # Example usage
     import sys
+    import argparse
     
-    if len(sys.argv) > 1:
-        host = sys.argv[1]
-    else:
-        host = os.getenv('KASA_HOST')
+    def print_usage():
+        """Print usage information."""
+        print("Usage:")
+        print("  python kasa_power_strip.py <host_ip> p<port> on|off")
+        print("  python kasa_power_strip.py <host_ip> status")
+        print("")
+        print("Examples:")
+        print("  python kasa_power_strip.py 192.168.1.100 p1 on     # Turn on port 1")
+        print("  python kasa_power_strip.py 192.168.1.100 p3 off    # Turn off port 3")
+        print("  python kasa_power_strip.py 192.168.1.100 status    # Show all port status")
+        print("")
+        print("Or set KASA_HOST environment variable and omit host_ip:")
+        print("  python kasa_power_strip.py p2 on")
+        print("  python kasa_power_strip.py status")
     
-    if not host:
-        print("Usage: python kasa_power_strip.py <host_ip>")
-        print("Or set KASA_HOST environment variable")
-        sys.exit(1)
+    def main():
+        """Main command-line interface."""
+        args = sys.argv[1:]
+        
+        # Determine if first argument is host IP
+        host = None
+        command_args = args
+        
+        if len(args) >= 1:
+            # Check if first arg looks like an IP address (contains dots)
+            if '.' in args[0] and not args[0].startswith('p'):
+                host = args[0]
+                command_args = args[1:]
+            else:
+                # Try to get host from environment
+                host = os.getenv('KASA_HOST')
+        
+        if not host:
+            print("ERROR: Host IP address required")
+            print_usage()
+            sys.exit(1)
+        
+        if len(command_args) == 0:
+            print("ERROR: Command required")
+            print_usage()
+            sys.exit(1)
+        
+        command = command_args[0].lower()
+        
+        # Validate port commands before connecting
+        if command.startswith('p') and command != 'status':
+            if len(command_args) < 2:
+                print("ERROR: Port command requires action (on/off)")
+                print_usage()
+                sys.exit(1)
+            
+            try:
+                port_str = command[1:]  # Remove 'p' prefix
+                port_num = int(port_str)
+                
+                if not 1 <= port_num <= 6:
+                    print("ERROR: Port number must be between 1 and 6")
+                    sys.exit(1)
+                    
+                action = command_args[1].lower()
+                if action not in ['on', 'off']:
+                    print(f"ERROR: Invalid action '{action}'. Use 'on' or 'off'")
+                    sys.exit(1)
+                    
+            except ValueError:
+                print(f"ERROR: Invalid port number '{port_str}'. Use p1, p2, p3, p4, p5, or p6")
+                sys.exit(1)
+        
+        try:
+            kasa = KasaPowerStrip(host)
+            
+            if command == 'status':
+                # Connect quietly for status command
+                kasa.connect(verbose=False)
+                # Show status of all ports
+                print("Port Status and Power Usage:")
+                print("-" * 40)
+                
+                # Get all status and power data in a single call
+                outlets, total_power = kasa.get_all_outlet_status_with_power()
+                
+                for outlet in outlets:
+                    port_num = outlet['outlet_id'] + 1  # Convert to 1-based
+                    status = 'ON' if outlet['is_on'] else 'OFF'
+                    alias = outlet['alias']
+                    power_w = outlet['power_w']
+                    
+                    print(f"Port {port_num}: {status:3} | {power_w:6.1f}W | {alias}")
+                
+                # Show total power consumption
+                print("-" * 40)
+                print(f"Total:     | {total_power:6.1f}W |")
+                
+            elif command.startswith('p'):
+                # Port control command (p1, p2, etc.) - already validated above
+                # Skip connection for speed - go directly to control
+                port_str = command[1:]
+                port_num = int(port_str)
+                outlet_id = port_num - 1  # Convert to 0-based index
+                action = command_args[1].lower()
+                
+                if action == 'on':
+                    kasa.turn_on_outlet(outlet_id)
+                elif action == 'off':
+                    kasa.turn_off_outlet(outlet_id)
+            else:
+                print(f"ERROR: Unknown command '{command}'")
+                print_usage()
+                sys.exit(1)
+                
+        except KasaPowerStripError as e:
+            print(f"ERROR: {e}")
+            sys.exit(1)
+        except Exception as e:
+            print(f"ERROR: Unexpected error: {e}")
+            sys.exit(1)
     
-    quick_test(host)
+    main()

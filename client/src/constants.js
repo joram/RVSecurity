@@ -3,3 +3,4 @@ export const IPADDR= "auto";
 export const PORT= "8000";
 export const BATT_VOLTS= "12";
 export const BATT_AH= "250";
+export const KASA_HOST= "10.0.0.188";

@@ -11,7 +11,6 @@ import requests
 import logging
 import os
 import json
-import argparse
 from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -42,6 +41,7 @@ class SynologyNASController:
         - SYNOLOGY_USER: Admin username
         - SYNOLOGY_PASSWORD: Admin password
         - SYNOLOGY_PORT: DSM port (default: 5000)
+        - SYNOLOGY_ETHERNET_PORT: Ethernet port connected to NAS (default: eth0)
         """
         # Load configuration
         config = self._load_config(config_file)
@@ -51,6 +51,7 @@ class SynologyNASController:
         self.admin_user = config['admin_user']
         self.admin_password = config['admin_password']
         self.port = config['port']
+        self.ethernet_port = config['ethernet_port']
         self.base_url = f"http://{self.ip_address}:{self.port}"
         self.session_id: Optional[str] = None
         
@@ -77,7 +78,8 @@ class SynologyNASController:
             'mac_address': None,
             'admin_user': None,
             'admin_password': None,
-            'port': 5000
+            'port': 5000,
+            'ethernet_port': 'eth0'
         }
         
         # Try to load from config file
@@ -91,7 +93,8 @@ class SynologyNASController:
             'SYNOLOGY_MAC': 'mac_address',
             'SYNOLOGY_USER': 'admin_user',
             'SYNOLOGY_PASSWORD': 'admin_password',
-            'SYNOLOGY_PORT': 'port'
+            'SYNOLOGY_PORT': 'port',
+            'SYNOLOGY_ETHERNET_PORT': 'ethernet_port'
         }
         
         for env_var, config_key in env_mapping.items():
@@ -159,6 +162,7 @@ class SynologyNASController:
             "admin_user": "admin",
             "admin_password": "your_secure_password_here",
             "port": 5000,
+            "ethernet_port": "eth0",
             "_comment": "This file contains sensitive information. Do not commit to version control!"
         }
         
@@ -266,6 +270,41 @@ class SynologyNASController:
         except Exception as e:
             logger.warning(f"Logout error (non-critical): {e}")
     
+    def _is_ethernet_port_active(self) -> bool:
+        """
+        Check if the specified ethernet port is active and has a link.
+        
+        Returns:
+            bool: True if ethernet port is active and has link
+        """
+        try:
+            # Check if interface exists and is up
+            with open(f'/sys/class/net/{self.ethernet_port}/operstate', 'r') as f:
+                state = f.read().strip()
+            
+            if state != 'up':
+                logger.error(f"Ethernet port {self.ethernet_port} is not up (state: {state})")
+                return False
+            
+            # Check if carrier is detected (cable connected)
+            try:
+                with open(f'/sys/class/net/{self.ethernet_port}/carrier', 'r') as f:
+                    carrier = f.read().strip()
+                
+                if carrier != '1':
+                    logger.error(f"Ethernet port {self.ethernet_port} has no carrier (cable disconnected)")
+                    return False
+            except IOError:
+                # Some interfaces don't support carrier detection
+                logger.warning(f"Cannot check carrier status for {self.ethernet_port}")
+            
+            logger.info(f"Ethernet port {self.ethernet_port} is active and ready")
+            return True
+            
+        except IOError as e:
+            logger.error(f"Failed to check ethernet port {self.ethernet_port}: {e}")
+            return False
+    
     def is_online(self) -> bool:
         """
         Check if the NAS is online by attempting to connect to the DSM interface.
@@ -282,6 +321,7 @@ class SynologyNASController:
     def power_on(self) -> bool:
         """
         Power on the NAS using Wake-on-LAN.
+        First verifies that the ethernet port is active before sending WoL packet.
         
         Returns:
             bool: True if WoL packet was sent successfully
@@ -291,6 +331,11 @@ class SynologyNASController:
         if self.is_online():
             logger.info("NAS is already online")
             return True
+        
+        # Check if ethernet port is active before attempting WoL
+        if not self._is_ethernet_port_active():
+            logger.error(f"Cannot send Wake-on-LAN: ethernet port {self.ethernet_port} is not active")
+            return False
         
         # Use subnet broadcast with port 7 (approach 4 from troubleshooting)
         # This was found to work better than global broadcast with port 9
@@ -351,6 +396,8 @@ class SynologyNASController:
             'online': self.is_online(),
             'ip_address': self.ip_address,
             'mac_address': self.mac_address,
+            'ethernet_port': self.ethernet_port,
+            'ethernet_active': self._is_ethernet_port_active(),
             'timestamp': time.time()
         }
         
@@ -379,68 +426,103 @@ class SynologyNASController:
 
 
 if __name__ == "__main__":
-    import argparse
+    import sys
     
-    # Configure logging
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    def print_usage():
+        """Print usage information."""
+        print("Usage:")
+        print("  python synology_nas_controller.py [config_file] status")
+        print("  python synology_nas_controller.py [config_file] power-on")
+        print("  python synology_nas_controller.py [config_file] power-off")
+        print("  python synology_nas_controller.py [config_file] create-config")
+        print("")
+        print("Examples:")
+        print("  python synology_nas_controller.py status                    # Check NAS status")
+        print("  python synology_nas_controller.py power-on                  # Power on NAS")
+        print("  python synology_nas_controller.py power-off                 # Power off NAS")
+        print("  python synology_nas_controller.py create-config             # Create config template")
+        print("  python synology_nas_controller.py /path/config.json status  # Use custom config")
     
-    parser = argparse.ArgumentParser(description='Synology NAS Controller')
-    parser.add_argument('--create-config', action='store_true', 
-                       help='Create a configuration file template')
-    parser.add_argument('--config', type=str, 
-                       help='Path to configuration file')
-    parser.add_argument('--status', action='store_true', 
-                       help='Check NAS status')
-    parser.add_argument('--power-on', action='store_true', 
-                       help='Power on the NAS')
-    parser.add_argument('--power-off', action='store_true', 
-                       help='Power off the NAS (use with caution!)')
-    
-    args = parser.parse_args()
-    
-    if args.create_config:
-        SynologyNASController.create_config_template(args.config or 'synology_nas_config.json')
-        exit(0)
-    
-    try:
-        nas = SynologyNASController(config_file=args.config)
+    def main():
+        """Main command-line interface."""
+        # Configure logging
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
         
-        if args.status:
-            status = nas.get_status()
-            print(f"NAS Status:")
-            print(f"  Online: {status['online']}")
-            print(f"  IP: {status['ip_address']}")
-            print(f"  MAC: {status['mac_address']}")
-            if 'system_info' in status:
-                print(f"  System Info: {status['system_info']}")
+        args = sys.argv[1:]
         
-        if args.power_on:
-            print("Sending power-on command...")
-            result = nas.power_on()
-            print(f"Power-on {'successful' if result else 'failed'}")
+        # Determine if first argument is a config file path
+        config_file = None
+        command_args = args
         
-        if args.power_off:
-            print("WARNING: This will shut down the NAS!")
+        if len(args) >= 1:
+            # Check if first arg looks like a file path (contains / or ends with .json)
+            if ('/' in args[0] or args[0].endswith('.json')) and args[0] not in ['status', 'power-on', 'power-off', 'create-config']:
+                config_file = args[0]
+                command_args = args[1:]
+        
+        if len(command_args) == 0:
+            print_usage()
+            sys.exit(1)
+        
+        command = command_args[0].lower()
+        
+        if command == 'create-config':
             try:
-                confirm = input("Are you sure? (yes/no): ")
-                if confirm.lower() == 'yes':
-                    print("Sending shutdown command...")
-                    result = nas.power_off()
-                    print(f"Shutdown {'successful' if result else 'failed'}")
-                else:
-                    print("Shutdown cancelled")
-            except KeyboardInterrupt:
-                print("\nShutdown cancelled by user (Ctrl+C)")
-                exit(0)
+                SynologyNASController.create_config_template(config_file or 'synology_nas_config.json')
+                sys.exit(0)
+            except Exception as e:
+                print(f"ERROR: Failed to create config template: {e}")
+                sys.exit(1)
+        
+        # For all other commands, we need to create the controller
+        try:
+            nas = SynologyNASController(config_file=config_file)
+            
+            if command == 'status':
+                status = nas.get_status()
+                print(f"NAS Status:")
+                print(f"  Online: {status['online']}")
+                print(f"  IP: {status['ip_address']}")
+                print(f"  MAC: {status['mac_address']}")
+                print(f"  Ethernet Port: {status['ethernet_port']}")
+                print(f"  Ethernet Active: {status['ethernet_active']}")
+                if 'system_info' in status:
+                    print(f"  System Info: {status['system_info']}")
+            
+            elif command == 'power-on':
+                print("Sending power-on command...")
+                result = nas.power_on()
+                print(f"Power-on {'successful' if result else 'failed'}")
+            
+            elif command == 'power-off':
+                print("WARNING: This will shut down the NAS!")
+                try:
+                    confirm = input("Are you sure? (yes/no): ")
+                    if confirm.lower() == 'yes':
+                        print("Sending shutdown command...")
+                        result = nas.power_off()
+                        print(f"Shutdown {'successful' if result else 'failed'}")
+                    else:
+                        print("Shutdown cancelled")
+                except KeyboardInterrupt:
+                    print("\nShutdown cancelled by user (Ctrl+C)")
+                    sys.exit(0)
+            
+            else:
+                print(f"ERROR: Unknown command '{command}'")
+                print_usage()
+                sys.exit(1)
+        
+        except ValueError as e:
+            print(f"Configuration error: {e}")
+            print("\nTo create a config template, run:")
+            print("python synology_nas_controller.py create-config")
+            sys.exit(1)
+        except KeyboardInterrupt:
+            print("\nOperation cancelled by user (Ctrl+C)")
+            sys.exit(0)
+        except Exception as e:
+            print(f"ERROR: {e}")
+            sys.exit(1)
     
-    except ValueError as e:
-        print(f"Configuration error: {e}")
-        print("\nTo create a config template, run:")
-        print("python synology_nas_controller.py --create-config")
-        exit(1)
-    except KeyboardInterrupt:
-        print("\nOperation cancelled by user (Ctrl+C)")
-        exit(0)
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        exit(1)
+    main()

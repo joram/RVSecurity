@@ -149,3 +149,5 @@ client/package-lock.json
 synology_nas_config.json
 server/synology_nas_config.json
 **/synology_nas_config.json
+server/constants.json
+

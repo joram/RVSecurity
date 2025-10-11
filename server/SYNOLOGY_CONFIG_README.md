@@ -15,6 +15,7 @@ export SYNOLOGY_MAC="00:11:32:44:55:66"
 export SYNOLOGY_USER="admin"
 export SYNOLOGY_PASSWORD="your_secure_password"
 export SYNOLOGY_PORT="5000"  # Optional, defaults to 5000
+export SYNOLOGY_ETHERNET_PORT="eth0"  # Optional, defaults to eth0
 ```
 
 ### 2. Configuration File (Good for development)
@@ -39,23 +40,28 @@ The config file is automatically excluded from Git via `.gitignore`.
    - DSM > Control Panel > Info Center > Network
    - Or use: `arp -a | grep [ip_address]`
 
+3. **Configure ethernet port connection:**
+   - Ensure the Pi's ethernet port (default: eth0) is connected to the NAS
+   - The controller verifies the ethernet port is active before sending Wake-on-LAN packets
+   - Use `ip link show` to list available ethernet interfaces on your Pi
+
 ## Usage Examples
 
 ```bash
 # Create configuration template
-python synology_nas_controller.py --create-config
+python synology_nas_controller.py create-config
 
 # Check NAS status
-python synology_nas_controller.py --status
+python synology_nas_controller.py status
 
 # Power on NAS
-python synology_nas_controller.py --power-on
+python synology_nas_controller.py power-on
 
 # Power off NAS (with confirmation)
-python synology_nas_controller.py --power-off
+python synology_nas_controller.py power-off
 
 # Use custom config file
-python synology_nas_controller.py --config /path/to/config.json --status
+python synology_nas_controller.py /path/to/config.json status
 ```
 
 ## Integration in Code
@@ -89,3 +95,19 @@ The controller looks for config files in this order:
 - The `.gitignore` prevents accidental commits
 - Environment variables are the most secure option for production
 - Never hardcode credentials in your source code
+
+## Ethernet Port Configuration
+
+The controller includes ethernet port verification to ensure Wake-on-LAN packets can be sent successfully:
+
+- **Default Port:** `eth0` (configurable via `ethernet_port` setting)
+- **Verification:** The controller checks that the ethernet port is:
+  - Present and up (`/sys/class/net/{port}/operstate`)
+  - Has carrier signal (cable connected) when supported
+- **Troubleshooting:**
+  - Use `ip link show` to list available network interfaces
+  - Use `cat /sys/class/net/eth0/operstate` to check interface state
+  - Use `cat /sys/class/net/eth0/carrier` to check cable connection
+  - Ensure your Pi's ethernet port is physically connected to the NAS
+
+If the ethernet port is not active, power-on operations will fail with an error message indicating the issue.

@@ -8,9 +8,11 @@ import sys
 import time
 import socket
 import requests
+import json
+import shutil
 from pythonping import ping
 #import alarm
-#import MQTTClient
+from rvglue import MQTTClient
 import rvglue
 from typing import Annotated
 from kasa_power_strip import KasaPowerStrip, KasaPowerStripError
@@ -23,6 +25,7 @@ from starlette.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 import random
 from server_calcs import *
+from server_calcs import constants
 
 
 
@@ -90,61 +93,6 @@ async def alarm(data: Annotated[AlarmPostData, Body()]) -> dict:
 async def alarms() -> dict:
     global bike_alarm_state, interior_alarm_state
     return {"bike": bike_alarm_state, "interior": interior_alarm_state}
-
-@app.post("/api/wifi-config")
-async def wifi_config(data: Annotated[WiFiConfigData, Body()]) -> dict:
-    """
-    Configure WiFi on RP2W device by calling the RP5toRPZero2WControl.py script
-    """
-    try:
-        # Path to the WiFi control script - adjust this path as needed
-        script_path = "/home/tblank/code/tblank1024/WifitoHostBridge/RP5toRPZero2WControl.py"
-        
-        # Prepare the command arguments
-        cmd_args = [sys.executable, script_path, data.ssid, data.password]
-        
-        # If permanent storage is requested, add a profile name
-        if data.permanent:
-            profile_name = f"Profile_{data.ssid}"
-            cmd_args.append(profile_name)
-        
-        # Execute the WiFi configuration script
-        result = subprocess.run(
-            cmd_args,
-            capture_output=True,
-            text=True,
-            timeout=30  # 30 second timeout
-        )
-        
-        # Capture the output
-        output = result.stdout
-        if result.stderr:
-            output += f"\nError output: {result.stderr}"
-        
-        return {
-            "exit_code": result.returncode,
-            "output": output,
-            "command": " ".join(cmd_args[:-2] + ["<ssid>", "<password>"] + cmd_args[-1:] if len(cmd_args) > 4 else ["<ssid>", "<password>"])
-        }
-        
-    except subprocess.TimeoutExpired:
-        return {
-            "exit_code": 1,
-            "output": "Error: WiFi configuration timed out after 30 seconds",
-            "command": "timeout"
-        }
-    except FileNotFoundError:
-        return {
-            "exit_code": 1,
-            "output": f"Error: WiFi configuration script not found at {script_path}",
-            "command": "not_found"
-        }
-    except Exception as e:
-        return {
-            "exit_code": 1,
-            "output": f"Error: Unexpected error occurred: {str(e)}",
-            "command": "error"
-        }
 
 @app.post("/api/wifi-config")
 async def wifi_config(data: Annotated[WiFiConfigData, Body()]) -> WiFiConfigResponse:
@@ -368,8 +316,11 @@ def get_kasa_power_strip():
     try:
         print("INFO: Attempting to create new Kasa power strip connection...")
         
+        # Get Kasa host from constants
+        kasa_host = constants.get("KASA_HOST", "10.0.0.188")
+        
         # Try to create and connect to Kasa power strip with balanced timeout
-        kasa_strip = KasaPowerStrip(timeout=8)  # Increased timeout for device discovery
+        kasa_strip = KasaPowerStrip(host=kasa_host, timeout=8)  # Use host from constants
         if kasa_strip.connect():
             print("INFO: Kasa power strip connected successfully")
             _kasa_strip_cache = kasa_strip
@@ -742,7 +693,7 @@ class DataResponse(BaseModel):
 
 # This is the POWER page function that is called by the front end client
 @app.get("/data/power")
-def data()-> DataResponse:  # Removed async
+def data_power()-> DataResponse:  # Removed async
     debug = 0  # Define debug variable
 
     (Charger_AC_power, Charger_AC_voltage, Invert_AC_power, DC_Charger_power, DC_Charger_volts, Invert_DC_power, Invert_status_num)= InvertCalcs()
@@ -787,7 +738,7 @@ def data()-> DataResponse:  # Removed async
 
 # This is the HOME page function that is called by the front end client
 @app.get("/data/home")
-def data()-> DataResponse:  # Removed async
+def data_home()-> DataResponse:  # Removed async
     debug = 0  # Define debug variable
     
     (Charger_AC_power, Charger_AC_voltage, Invert_AC_power, DC_Charger_power, DC_Charger_volts, Invert_DC_power, Invert_status_num)= InvertCalcs()
@@ -990,9 +941,8 @@ def get_kasa_debug_status() -> dict:
         
         # Test connection first before trying to get individual outlets
         try:
-            # Try a simple connection test with short timeout
-            test_result = kasa_strip._run_kasa_command(['state'])
-            if 'error' in test_result:
+            # Try a simple connection test
+            if not kasa_strip.test_connectivity():
                 raise KasaPowerStripError("Connection test failed")
         except Exception as e:
             # Connection failed, return mock data with error info
