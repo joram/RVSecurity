@@ -317,7 +317,7 @@ def get_kasa_power_strip():
         print("INFO: Attempting to create new Kasa power strip connection...")
         
         # Get Kasa host from constants
-        kasa_host = constants.get("KASA_HOST", "10.0.0.188")
+        kasa_host = constants.get("KASA_IP", "10.0.0.188")
         
         # Try to create and connect to Kasa power strip with balanced timeout
         kasa_strip = KasaPowerStrip(host=kasa_host, timeout=8)  # Use host from constants
@@ -1087,6 +1087,9 @@ def control_kasa_outlet_debug(outlet_id: int, data: Annotated[dict, Body()]) -> 
         except:
             power_watts = 0
         
+        # Clear cache to ensure next status request gets fresh data
+        clear_kasa_cache()
+        
         return {
             "success": True,
             "message": f"Kasa outlet {outlet_id} turned {action}",
@@ -1105,6 +1108,83 @@ def control_kasa_outlet_debug(outlet_id: int, data: Annotated[dict, Body()]) -> 
             "power_watts": mock_power,
             "mock": True,
             "error": str(e)
+        }
+
+# Synology NAS debug endpoints
+@app.post("/api/debug/synology/{action}")
+async def debug_synology_control(action: str):
+    """Control Synology NAS (status, power-on, power-off)"""
+    try:
+        import subprocess
+        import os
+        
+        if action not in ['status', 'power-on', 'power-off']:
+            return {
+                "success": False,
+                "message": f"Invalid action: {action}. Valid actions: status, power-on, power-off"
+            }
+        
+        # Get the current directory (server directory)
+        server_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Use the command line interface for faster response
+        cmd = ['python', 'synology_nas_controller.py', f'--{action}']
+        
+        # Add --force flag for power-off to skip confirmation prompt
+        if action == 'power-off':
+            cmd.append('--force')
+            
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15, cwd=server_dir)
+        
+        if result.returncode == 0:
+            output = result.stdout.strip()
+            
+            # For status command, try to parse additional info
+            if action == 'status' and 'NAS Status:' in output:
+                # Extract status information from output
+                lines = output.split('\n')
+                status_info = {}
+                for line in lines:
+                    if ':' in line and any(key in line for key in ['Online', 'IP', 'MAC', 'Ethernet', 'Model']):
+                        parts = line.split(':', 1)
+                        if len(parts) == 2:
+                            key = parts[0].strip().lower().replace(' ', '_')
+                            value = parts[1].strip()
+                            # Handle boolean values
+                            if value.lower() in ['yes', 'true']:
+                                value = True
+                            elif value.lower() in ['no', 'false']:
+                                value = False
+                            status_info[key] = value
+                
+                return {
+                    "success": True,
+                    "message": output,
+                    "status": status_info
+                }
+            else:
+                return {
+                    "success": True,
+                    "message": output
+                }
+        else:
+            error_msg = result.stderr.strip() if result.stderr else "Command failed"
+            # Include both stdout and stderr for better debugging
+            full_error = f"STDERR: {result.stderr}\nSTDOUT: {result.stdout}" if result.stderr and result.stdout else error_msg
+            return {
+                "success": False,
+                "message": f"Synology {action} failed: {full_error}"
+            }
+            
+    except subprocess.TimeoutExpired:
+        return {
+            "success": False,
+            "message": f"Synology {action} command timed out (15s)"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error controlling Synology NAS: {str(e)}"
         }
 
 @app.get("/status")

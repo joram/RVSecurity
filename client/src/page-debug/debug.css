@@ -255,3 +255,79 @@
   color: #7f8c8d;
   font-style: italic;
 }
+
+/* Action buttons for Synology and Kasa port controls */
+.action-button {
+  padding: 8px 16px;
+  margin: 5px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  min-width: 80px;
+}
+
+.action-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.action-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.status-button {
+  background-color: #3498db;
+  color: white;
+}
+
+.status-button:hover:not(:disabled) {
+  background-color: #2980b9;
+}
+
+.power-on-button {
+  background-color: #27ae60;
+  color: white;
+}
+
+.power-on-button:hover:not(:disabled) {
+  background-color: #229954;
+}
+
+.power-off-button {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.power-off-button:hover:not(:disabled) {
+  background-color: #c0392b;
+}
+
+.on-active {
+  background-color: #27ae60 !important;
+  color: white !important;
+}
+
+.off-active {
+  background-color: #e74c3c !important;
+  color: white !important;
+}
+
+/* Status display for Synology */
+.status-display {
+  margin-top: 15px;
+  padding: 10px;
+  background-color: #ecf0f1;
+  border-radius: 5px;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.status-display div {
+  margin-bottom: 5px;
+}

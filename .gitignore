@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+
+
 #React Likely want to remove this later
 api/build/
 app/package-lock.json
@@ -145,9 +147,8 @@ dmypy.json
 server/constants.json
 client/package-lock.json
 
-# Synology NAS configuration (contains sensitive credentials)
-synology_nas_config.json
-server/synology_nas_config.json
-**/synology_nas_config.json
+# Synology NAS configuration - auto generated file
 server/constants.json
 
+# Sensitive configuration files
+server/synology-password.json

@@ -38,12 +38,14 @@ class KasaPowerStrip:
             timeout: Command timeout in seconds (default: 8, balanced for device discovery)
         """
         # Support environment variables for Docker configuration
-        self.host = host or os.getenv('KASA_HOST')
+        self.host = host or os.getenv('KASA_IP')
         self.timeout = timeout
         self.device_info = None
         
         if not self.host:
-            raise KasaPowerStripError("Host IP address is required. Set KASA_HOST environment variable or pass host parameter.")
+            raise KasaPowerStripError(
+                "Host IP address required. Provide host parameter or set KASA_IP environment variable."
+            )
     
     def _run_kasa_command(self, command_args: List[str], use_json: bool = True) -> Dict:
         """
@@ -548,78 +550,55 @@ if __name__ == "__main__":
     import sys
     import argparse
     
-    def print_usage():
-        """Print usage information."""
-        print("Usage:")
-        print("  python kasa_power_strip.py <host_ip> p<port> on|off")
-        print("  python kasa_power_strip.py <host_ip> status")
-        print("")
-        print("Examples:")
-        print("  python kasa_power_strip.py 192.168.1.100 p1 on     # Turn on port 1")
-        print("  python kasa_power_strip.py 192.168.1.100 p3 off    # Turn off port 3")
-        print("  python kasa_power_strip.py 192.168.1.100 status    # Show all port status")
-        print("")
-        print("Or set KASA_HOST environment variable and omit host_ip:")
-        print("  python kasa_power_strip.py p2 on")
-        print("  python kasa_power_strip.py status")
-    
     def main():
-        """Main command-line interface."""
-        args = sys.argv[1:]
+        """Main command-line interface using argparse."""
+        parser = argparse.ArgumentParser(
+            description='Kasa Smart Power Strip HS300 Controller',
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            epilog="""
+Examples:
+  python kasa_power_strip.py --host 192.168.1.100 --status
+  python kasa_power_strip.py --host 192.168.1.100 --port 1 --action on
+  python kasa_power_strip.py --host 192.168.1.100 --port 3 --action off
+  python kasa_power_strip.py --status  # Uses KASA_IP environment variable
+  python kasa_power_strip.py --port 2 --action on  # Uses KASA_IP environment variable
+            """
+        )
         
-        # Determine if first argument is host IP
-        host = None
-        command_args = args
+        # Host argument (optional if KASA_IP is set)
+        parser.add_argument('--host', '--ip', 
+                           help='IP address of the Kasa power strip (default: uses KASA_IP environment variable)')
         
-        if len(args) >= 1:
-            # Check if first arg looks like an IP address (contains dots)
-            if '.' in args[0] and not args[0].startswith('p'):
-                host = args[0]
-                command_args = args[1:]
-            else:
-                # Try to get host from environment
-                host = os.getenv('KASA_HOST')
+        # Command group - mutually exclusive
+        command_group = parser.add_mutually_exclusive_group(required=True)
+        command_group.add_argument('--status', action='store_true',
+                                  help='Show status and power usage of all outlets')
+        command_group.add_argument('--port', type=int, choices=range(1, 7), metavar='1-6',
+                                  help='Outlet port number to control (1-6)')
         
+        # Action argument (required when --port is used)
+        parser.add_argument('--action', choices=['on', 'off', 'toggle'],
+                           help='Action to perform on the outlet (required with --port)')
+        
+        # Parse arguments
+        args = parser.parse_args()
+        
+        # Validate arguments
+        if args.port and not args.action:
+            parser.error("--action is required when --port is specified")
+        
+        if args.action and not args.port:
+            parser.error("--port is required when --action is specified")
+        
+        # Determine host
+        host = args.host or os.getenv('KASA_IP')
         if not host:
-            print("ERROR: Host IP address required")
-            print_usage()
-            sys.exit(1)
-        
-        if len(command_args) == 0:
-            print("ERROR: Command required")
-            print_usage()
-            sys.exit(1)
-        
-        command = command_args[0].lower()
-        
-        # Validate port commands before connecting
-        if command.startswith('p') and command != 'status':
-            if len(command_args) < 2:
-                print("ERROR: Port command requires action (on/off)")
-                print_usage()
-                sys.exit(1)
-            
-            try:
-                port_str = command[1:]  # Remove 'p' prefix
-                port_num = int(port_str)
-                
-                if not 1 <= port_num <= 6:
-                    print("ERROR: Port number must be between 1 and 6")
-                    sys.exit(1)
-                    
-                action = command_args[1].lower()
-                if action not in ['on', 'off']:
-                    print(f"ERROR: Invalid action '{action}'. Use 'on' or 'off'")
-                    sys.exit(1)
-                    
-            except ValueError:
-                print(f"ERROR: Invalid port number '{port_str}'. Use p1, p2, p3, p4, p5, or p6")
-                sys.exit(1)
+            parser.error("Host IP address required. Use --host or set KASA_IP environment variable")
         
         try:
             kasa = KasaPowerStrip(host)
             
-            if command == 'status':
+            if args.status:
                 # Connect quietly for status command
                 kasa.connect(verbose=False)
                 # Show status of all ports
@@ -641,22 +620,16 @@ if __name__ == "__main__":
                 print("-" * 40)
                 print(f"Total:     | {total_power:6.1f}W |")
                 
-            elif command.startswith('p'):
-                # Port control command (p1, p2, etc.) - already validated above
-                # Skip connection for speed - go directly to control
-                port_str = command[1:]
-                port_num = int(port_str)
-                outlet_id = port_num - 1  # Convert to 0-based index
-                action = command_args[1].lower()
+            elif args.port:
+                # Port control command
+                outlet_id = args.port - 1  # Convert to 0-based index
                 
-                if action == 'on':
+                if args.action == 'on':
                     kasa.turn_on_outlet(outlet_id)
-                elif action == 'off':
+                elif args.action == 'off':
                     kasa.turn_off_outlet(outlet_id)
-            else:
-                print(f"ERROR: Unknown command '{command}'")
-                print_usage()
-                sys.exit(1)
+                elif args.action == 'toggle':
+                    kasa.toggle_outlet(outlet_id)
                 
         except KasaPowerStripError as e:
             print(f"ERROR: {e}")

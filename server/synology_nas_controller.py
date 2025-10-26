@@ -61,10 +61,10 @@ class SynologyNASController:
     
     def _load_config(self, config_file: Optional[str] = None) -> Dict[str, Any]:
         """
-        Load configuration from environment variables and config file.
+        Load configuration from environment variables, constants.json, and password file.
         
         Args:
-            config_file (str, optional): Path to config file
+            config_file (str, optional): Path to password file
             
         Returns:
             dict: Configuration dictionary
@@ -82,10 +82,20 @@ class SynologyNASController:
             'ethernet_port': 'eth0'
         }
         
-        # Try to load from config file
-        config_data = self._load_config_file(config_file)
-        if config_data:
-            config.update(config_data)
+        # Load constants from constants.json (contains IP, MAC, etc.)
+        constants_data = self._load_constants_file()
+        if constants_data:
+            config.update({
+                'ip_address': constants_data.get('SYNOLOGY_IP'),
+                'mac_address': constants_data.get('SYNOLOGY_MAC'),
+                'port': constants_data.get('SYNOLOGY_PORT', 5000)
+            })
+        
+        # Load password from password file
+        password_file = config_file or 'synology-password.json'
+        password_data = self._load_password_file(password_file)
+        if password_data:
+            config.update(password_data)
         
         # Override with environment variables (highest priority)
         env_mapping = {
@@ -112,7 +122,7 @@ class SynologyNASController:
         if missing_fields:
             raise ValueError(
                 f"Missing required configuration: {', '.join(missing_fields)}. "
-                f"Set environment variables or provide config file."
+                f"Check constants.json and synology-password.json files."
             )
         
         return config
@@ -148,21 +158,62 @@ class SynologyNASController:
         
         return None
     
-    @classmethod
-    def create_config_template(cls, config_file: str = 'synology_nas_config.json') -> None:
+    def _load_constants_file(self) -> Optional[Dict[str, Any]]:
         """
-        Create a template configuration file.
+        Load constants from constants.json file.
+        
+        Returns:
+            dict or None: Constants data or None if file not found
+        """
+        constants_file = 'constants.json'
+        
+        if os.path.exists(constants_file):
+            try:
+                with open(constants_file, 'r') as f:
+                    constants_data = json.load(f)
+                logger.info(f"Loaded constants from {constants_file}")
+                return constants_data
+            except (json.JSONDecodeError, IOError) as e:
+                logger.warning(f"Failed to load constants from {constants_file}: {e}")
+        else:
+            logger.warning(f"Constants file {constants_file} not found")
+        
+        return None
+    
+    def _load_password_file(self, password_file: str) -> Optional[Dict[str, Any]]:
+        """
+        Load password from synology-password.json file.
         
         Args:
-            config_file (str): Path for the config file template
+            password_file (str): Path to password file
+            
+        Returns:
+            dict or None: Password data or None if file not found
+        """
+        if os.path.exists(password_file):
+            try:
+                with open(password_file, 'r') as f:
+                    password_data = json.load(f)
+                logger.info(f"Loaded password from {password_file}")
+                return password_data
+            except (json.JSONDecodeError, IOError) as e:
+                logger.warning(f"Failed to load password from {password_file}: {e}")
+        else:
+            logger.warning(f"Password file {password_file} not found")
+        
+        return None
+    
+    @classmethod
+    def create_config_template(cls, config_file: str = 'synology-password.json') -> None:
+        """
+        Create a template password file.
+        
+        Args:
+            config_file (str): Path for the password file template
         """
         template = {
-            "ip_address": "192.168.1.100",
-            "mac_address": "00:11:32:44:55:66",
-            "admin_user": "admin",
+            "admin_user": "Administrator", 
             "admin_password": "your_secure_password_here",
-            "port": 5000,
-            "ethernet_port": "eth0",
             "_comment": "This file contains sensitive information. Do not commit to version control!"
         }
         
@@ -176,13 +227,14 @@ class SynologyNASController:
             except (AttributeError, OSError):
                 pass  # Not Unix-like or permission change failed
             
-            logger.info(f"Created config template at {config_file}")
-            print(f"Config template created at {config_file}")
-            print("Please edit this file with your actual NAS details.")
+            logger.info(f"Created password template at {config_file}")
+            print(f"Password template created at {config_file}")
+            print("Please edit this file with your actual NAS password.")
+            print("Configuration values (IP, MAC, etc.) should be set in constants.js")
             print("DO NOT commit this file to version control!")
             
         except IOError as e:
-            logger.error(f"Failed to create config template: {e}")
+            logger.error(f"Failed to create password template: {e}")
             raise
     
     def _send_magic_packet(self, mac_address: str, broadcast_ip: str = '255.255.255.255', port: int = 9) -> bool:
@@ -427,102 +479,147 @@ class SynologyNASController:
 
 if __name__ == "__main__":
     import sys
-    
-    def print_usage():
-        """Print usage information."""
-        print("Usage:")
-        print("  python synology_nas_controller.py [config_file] status")
-        print("  python synology_nas_controller.py [config_file] power-on")
-        print("  python synology_nas_controller.py [config_file] power-off")
-        print("  python synology_nas_controller.py [config_file] create-config")
-        print("")
-        print("Examples:")
-        print("  python synology_nas_controller.py status                    # Check NAS status")
-        print("  python synology_nas_controller.py power-on                  # Power on NAS")
-        print("  python synology_nas_controller.py power-off                 # Power off NAS")
-        print("  python synology_nas_controller.py create-config             # Create config template")
-        print("  python synology_nas_controller.py /path/config.json status  # Use custom config")
+    import argparse
     
     def main():
-        """Main command-line interface."""
+        """Main command-line interface using argparse."""
+        parser = argparse.ArgumentParser(
+            description='Synology NAS DS620slim Controller',
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            epilog="""
+Examples:
+  python synology_nas_controller.py --status
+  python synology_nas_controller.py --power-on
+  python synology_nas_controller.py --power-off
+  python synology_nas_controller.py --create-config
+  python synology_nas_controller.py --config /path/to/password.json --status
+  python synology_nas_controller.py --config custom-password.json --power-on
+            """
+        )
+        
+        # Configuration file argument
+        parser.add_argument('--config', '--password-file',
+                           help='Path to password file (default: synology-password.json)')
+        
+        # Command group - mutually exclusive
+        command_group = parser.add_mutually_exclusive_group(required=True)
+        command_group.add_argument('--status', action='store_true',
+                                  help='Show NAS status and system information')
+        command_group.add_argument('--power-on', action='store_true',
+                                  help='Power on the NAS using Wake-on-LAN')
+        command_group.add_argument('--power-off', action='store_true',
+                                  help='Power off the NAS using DSM API')
+        command_group.add_argument('--create-config', action='store_true',
+                                  help='Create a password file template')
+        
+        # Additional options
+        parser.add_argument('--force', action='store_true',
+                           help='Skip confirmation prompt for power-off')
+        parser.add_argument('--verbose', '-v', action='store_true',
+                           help='Enable verbose logging output')
+        
+        # Parse arguments
+        args = parser.parse_args()
+        
         # Configure logging
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+        log_level = logging.DEBUG if args.verbose else logging.INFO
+        logging.basicConfig(level=log_level, format='%(asctime)s - %(levelname)s - %(message)s')
         
-        args = sys.argv[1:]
-        
-        # Determine if first argument is a config file path
-        config_file = None
-        command_args = args
-        
-        if len(args) >= 1:
-            # Check if first arg looks like a file path (contains / or ends with .json)
-            if ('/' in args[0] or args[0].endswith('.json')) and args[0] not in ['status', 'power-on', 'power-off', 'create-config']:
-                config_file = args[0]
-                command_args = args[1:]
-        
-        if len(command_args) == 0:
-            print_usage()
-            sys.exit(1)
-        
-        command = command_args[0].lower()
-        
-        if command == 'create-config':
-            try:
-                SynologyNASController.create_config_template(config_file or 'synology_nas_config.json')
-                sys.exit(0)
-            except Exception as e:
-                print(f"ERROR: Failed to create config template: {e}")
-                sys.exit(1)
-        
-        # For all other commands, we need to create the controller
         try:
-            nas = SynologyNASController(config_file=config_file)
+            if args.create_config:
+                # Create config template
+                config_file = args.config or 'synology-password.json'
+                SynologyNASController.create_config_template(config_file)
+                sys.exit(0)
             
-            if command == 'status':
+            # For all other commands, create the controller
+            nas = SynologyNASController(config_file=args.config)
+            
+            if args.status:
+                # Show NAS status
+                print("Synology NAS Status:")
+                print("-" * 50)
+                
                 status = nas.get_status()
-                print(f"NAS Status:")
-                print(f"  Online: {status['online']}")
-                print(f"  IP: {status['ip_address']}")
-                print(f"  MAC: {status['mac_address']}")
-                print(f"  Ethernet Port: {status['ethernet_port']}")
-                print(f"  Ethernet Active: {status['ethernet_active']}")
-                if 'system_info' in status:
-                    print(f"  System Info: {status['system_info']}")
-            
-            elif command == 'power-on':
-                print("Sending power-on command...")
+                
+                # Basic status
+                online_status = "ONLINE" if status['online'] else "OFFLINE"
+                print(f"Status:        {online_status}")
+                print(f"IP Address:    {status['ip_address']}")
+                print(f"MAC Address:   {status['mac_address']}")
+                print(f"Ethernet Port: {status['ethernet_port']}")
+                
+                eth_status = "ACTIVE" if status['ethernet_active'] else "INACTIVE"
+                print(f"Ethernet:      {eth_status}")
+                
+                # System information (if available)
+                if 'system_info' in status and status['system_info']:
+                    print("\nSystem Information:")
+                    print("-" * 50)
+                    sys_info = status['system_info']
+                    
+                    if 'model' in sys_info:
+                        print(f"Model:         {sys_info['model']}")
+                    if 'firmware_ver' in sys_info:
+                        print(f"Firmware:      {sys_info['firmware_ver']}")
+                    if 'up_time' in sys_info:
+                        print(f"Uptime:        {sys_info['up_time']}")
+                    if 'sys_temp' in sys_info:
+                        print(f"Temperature:   {sys_info['sys_temp']}°C")
+                    if 'cpu_family' in sys_info and 'cpu_series' in sys_info:
+                        print(f"CPU:           {sys_info['cpu_family']} {sys_info['cpu_series']}")
+                    if 'ram_size' in sys_info:
+                        print(f"RAM:           {sys_info['ram_size']} MB")
+                
+            elif args.power_on:
+                # Power on the NAS
+                print("Sending Wake-on-LAN packet to power on NAS...")
                 result = nas.power_on()
-                print(f"Power-on {'successful' if result else 'failed'}")
+                
+                if result:
+                    print("SUCCESS: Wake-on-LAN packet sent")
+                    print("The NAS should boot up in 30-60 seconds")
+                else:
+                    print("FAILED: Could not send Wake-on-LAN packet")
+                    sys.exit(1)
             
-            elif command == 'power-off':
-                print("WARNING: This will shut down the NAS!")
-                try:
-                    confirm = input("Are you sure? (yes/no): ")
-                    if confirm.lower() == 'yes':
-                        print("Sending shutdown command...")
-                        result = nas.power_off()
-                        print(f"Shutdown {'successful' if result else 'failed'}")
-                    else:
-                        print("Shutdown cancelled")
-                except KeyboardInterrupt:
-                    print("\nShutdown cancelled by user (Ctrl+C)")
-                    sys.exit(0)
-            
-            else:
-                print(f"ERROR: Unknown command '{command}'")
-                print_usage()
-                sys.exit(1)
+            elif args.power_off:
+                # Power off the NAS
+                if not args.force:
+                    print("WARNING: This will shut down the NAS!")
+                    try:
+                        confirm = input("Are you sure you want to shutdown the NAS? (yes/no): ")
+                        if confirm.lower() not in ['yes', 'y']:
+                            print("Shutdown cancelled")
+                            sys.exit(0)
+                    except KeyboardInterrupt:
+                        print("\nShutdown cancelled by user (Ctrl+C)")
+                        sys.exit(0)
+                
+                print("Sending shutdown command to NAS...")
+                result = nas.power_off()
+                
+                if result:
+                    print("SUCCESS: Shutdown command sent")
+                    print("The NAS will shut down in a few seconds")
+                else:
+                    print("FAILED: Could not send shutdown command")
+                    sys.exit(1)
         
         except ValueError as e:
             print(f"Configuration error: {e}")
-            print("\nTo create a config template, run:")
-            print("python synology_nas_controller.py create-config")
+            print("\nTo create a password template, run:")
+            print("python synology_nas_controller.py --create-config")
+            print("Make sure constants.json exists (run makefile to generate from constants.js)")
             sys.exit(1)
         except KeyboardInterrupt:
             print("\nOperation cancelled by user (Ctrl+C)")
             sys.exit(0)
         except Exception as e:
             print(f"ERROR: {e}")
+            if args.verbose:
+                import traceback
+                traceback.print_exc()
             sys.exit(1)
     
     main()

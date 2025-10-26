@@ -20,7 +20,7 @@ setup:
 server_start:
 # do this when working on the server.py code
 # start_server in a separate cmd window; always first
-	cd server; KASA_HOST=10.0.0.188 ../venv/bin/python ./server.py
+	cd server; ../venv/bin/python ./server.py
 
 client_start:
 # Only need to make client_start if changing the client code
