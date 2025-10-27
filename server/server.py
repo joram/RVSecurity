@@ -57,6 +57,49 @@ interior_alarm_state = False
 # Internet Connection State Management
 current_internet_connection = "none"  # Tracks current connection: "none", "cellular", "wifi", "starlink", "wired"
 
+# Synology scheduled shutdown management
+scheduled_shutdown_timestamp = None
+shutdown_timer = None
+
+def execute_scheduled_shutdown():
+    """Execute the scheduled shutdown of Synology NAS"""
+    global scheduled_shutdown_timestamp, shutdown_timer
+    print("Executing scheduled Synology shutdown...")
+    try:
+        # Call the actual shutdown command
+        import subprocess
+        server_dir = os.path.dirname(os.path.abspath(__file__))
+        cmd = ['python', 'synology_nas_controller.py', '--power-off', '--force']
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15, cwd=server_dir)
+        
+        if result.returncode == 0:
+            print("Scheduled shutdown completed successfully")
+        else:
+            print(f"Scheduled shutdown failed: {result.stderr}")
+    except Exception as e:
+        print(f"Error during scheduled shutdown: {e}")
+    finally:
+        # Clear the scheduled time and timer
+        scheduled_shutdown_timestamp = None
+        shutdown_timer = None
+
+def cancel_shutdown_timer():
+    """Cancel any existing shutdown timer"""
+    global shutdown_timer
+    if shutdown_timer is not None:
+        shutdown_timer.cancel()
+        shutdown_timer = None
+
+def schedule_shutdown_timer(delay_seconds):
+    """Schedule a shutdown timer for the specified delay"""
+    global shutdown_timer
+    # Cancel any existing timer first
+    cancel_shutdown_timer()
+    # Create new timer
+    shutdown_timer = threading.Timer(delay_seconds, execute_scheduled_shutdown)
+    shutdown_timer.start()
+    print(f"Scheduled shutdown timer set for {delay_seconds} seconds")
+
 class AlarmPostData(BaseModel):
     alarm: str
     state: bool
@@ -75,6 +118,9 @@ class WiFiConfigResponse(BaseModel):
     exit_code: int
     output: str
     success: bool
+
+class ScheduleShutdownData(BaseModel):
+    hours: int
 
 @app.post("/api/alarmpost")
 async def alarm(data: Annotated[AlarmPostData, Body()]) -> dict:
@@ -1110,6 +1156,58 @@ def control_kasa_outlet_debug(outlet_id: int, data: Annotated[dict, Body()]) -> 
             "error": str(e)
         }
 
+# Synology scheduled shutdown endpoints (must come before generic handler)
+@app.get("/api/debug/synology/scheduled-time")
+async def get_scheduled_shutdown():
+    """Get the scheduled shutdown timestamp"""
+    global scheduled_shutdown_timestamp
+    return {
+        "success": True,
+        "scheduled_time": scheduled_shutdown_timestamp
+    }
+
+@app.post("/api/debug/synology/schedule-shutdown")
+async def schedule_shutdown(data: Annotated[ScheduleShutdownData, Body()]):
+    """Schedule a shutdown for X hours from now"""
+    global scheduled_shutdown_timestamp
+    
+    if data.hours > 0:
+        delay_seconds = data.hours * 3600
+        scheduled_shutdown_timestamp = time.time() + delay_seconds
+        
+        # Start the actual timer that will execute the shutdown
+        schedule_shutdown_timer(delay_seconds)
+        
+        return {
+            "success": True,
+            "scheduled_time": scheduled_shutdown_timestamp,
+            "message": f"Server scheduled to turn off in {data.hours} hours"
+        }
+    else:
+        # Cancel scheduled shutdown
+        cancel_shutdown_timer()
+        scheduled_shutdown_timestamp = None
+        return {
+            "success": True,
+            "scheduled_time": None,
+            "message": "Scheduled shutdown cancelled"
+        }
+
+@app.delete("/api/debug/synology/scheduled-time")
+async def cancel_scheduled_shutdown():
+    """Cancel any scheduled shutdown"""
+    global scheduled_shutdown_timestamp
+    
+    # Cancel the timer
+    cancel_shutdown_timer()
+    scheduled_shutdown_timestamp = None
+    
+    return {
+        "success": True,
+        "scheduled_time": None,
+        "message": "Scheduled shutdown cancelled"
+    }
+
 # Synology NAS debug endpoints
 @app.post("/api/debug/synology/{action}")
 async def debug_synology_control(action: str):
@@ -1138,6 +1236,12 @@ async def debug_synology_control(action: str):
         
         if result.returncode == 0:
             output = result.stdout.strip()
+            
+            # If this is a power-off command, cancel any scheduled shutdown timer
+            if action == 'power-off':
+                cancel_shutdown_timer()
+                global scheduled_shutdown_timestamp
+                scheduled_shutdown_timestamp = None
             
             # For status command, try to parse additional info
             if action == 'status' and 'NAS Status:' in output:
@@ -1186,6 +1290,8 @@ async def debug_synology_control(action: str):
             "success": False,
             "message": f"Error controlling Synology NAS: {str(e)}"
         }
+
+
 
 @app.get("/status")
 async def status() -> dict:

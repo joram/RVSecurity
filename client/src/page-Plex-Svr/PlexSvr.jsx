@@ -6,8 +6,9 @@ import { getServerUrl } from '../utils/api';
 const PlexSvr = () => {
   const [selectedOption, setSelectedOption] = useState('off');
   const [message, setMessage] = useState('');
+  const [scheduledTime, setScheduledTime] = useState(null);
   const [timeRemaining, setTimeRemaining] = useState(0);
-  const [isServerOn, setIsServerOn] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const timerRef = useRef(null);
 
   // Control Synology NAS
@@ -31,7 +32,6 @@ const PlexSvr = () => {
       
       if (result.success) {
         setMessage(`${action}: ${result.message}`);
-        setIsServerOn(action === 'power-on');
         return true;
       } else {
         setMessage(`${action} failed: ${result.message}`);
@@ -44,27 +44,214 @@ const PlexSvr = () => {
     }
   };
 
-  // Start countdown timer
-  const startTimer = (minutes) => {
+  // Get scheduled shutdown time from server
+  const getScheduledTime = async () => {
+    try {
+      const response = await fetch(`${getServerUrl()}/api/debug/synology/scheduled-time`);
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setScheduledTime(result.scheduled_time);
+          return result.scheduled_time;
+        }
+      }
+    } catch (error) {
+      console.error('Error getting scheduled time:', error);
+    }
+    return null;
+  };
+
+  // Schedule shutdown on server
+  const scheduleShutdown = async (hours) => {
+    try {
+      const response = await fetch(`${getServerUrl()}/api/debug/synology/schedule-shutdown`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ hours }),
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setScheduledTime(result.scheduled_time);
+          return result.scheduled_time; // Return the actual timestamp
+        }
+      }
+    } catch (error) {
+      console.error('Error scheduling shutdown:', error);
+    }
+    return false;
+  };
+
+  // Cancel scheduled shutdown
+  const cancelScheduledShutdown = async () => {
+    try {
+      const response = await fetch(`${getServerUrl()}/api/debug/synology/scheduled-time`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setScheduledTime(null);
+          return true;
+        }
+      }
+    } catch (error) {
+      console.error('Error cancelling scheduled shutdown:', error);
+    }
+    return false;
+  };
+
+  // Check if server is currently running (without changing UI state)
+  const isServerCurrentlyRunning = async () => {
+    try {
+      const response = await fetch(`${getServerUrl()}/api/debug/synology/status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        return false;
+      }
+      
+      const result = await response.json();
+      
+      if (result.success && result.message) {
+        const messageText = String(result.message).toLowerCase();
+        
+        // Look for indicators that server is actually running/responding to services
+        return messageText.includes('running') || 
+               messageText.includes('online') || 
+               messageText.includes('logged in') ||
+               messageText.includes('authenticated') ||
+               messageText.includes('web interface') ||
+               messageText.includes('dsm') ||
+               (messageText.includes('status') && messageText.includes('ok'));
+      }
+    } catch (error) {
+      console.error('Error checking server status:', error);
+    }
+    return false;
+  };
+
+  // Check server status on component load
+  const checkServerStatus = async () => {
+    let serverIsOn = false; // Declare local variable
+    
+    try {
+      setIsLoading(true);
+      setMessage('Checking server status...');
+      
+      const response = await fetch(`${getServerUrl()}/api/debug/synology/status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        // Check the message field for actual server status indicators
+        if (result.message) {
+          const messageText = String(result.message).toLowerCase();
+          
+          // Look for indicators that server is actually running/responding to services
+          // NOT just network reachable (which could be just WoL capability)
+          serverIsOn = messageText.includes('running') || 
+                      messageText.includes('online') || 
+                      messageText.includes('logged in') ||
+                      messageText.includes('authenticated') ||
+                      messageText.includes('web interface') ||
+                      messageText.includes('dsm') ||
+                      (messageText.includes('status') && messageText.includes('ok'));
+        }
+        
+        if (serverIsOn) {
+          // Don't set the radio button here - let getScheduledTime determine if it's timed or manual
+          setMessage("✅ Server is running.");
+        } else {
+          setSelectedOption('off');
+          // Check if ethernet is active for simplified message
+          const ethernetActive = result.status && 
+                                result.status.ethernet && 
+                                result.status.ethernet.toLowerCase().includes('active');
+          
+          if (ethernetActive) {
+            setMessage("⏹️ Server is offline and ready to startup");
+          } else {
+            setMessage("⏹️ Server is offline and must be restarted manually. It's behind TV set)");
+          }
+        }
+      } else {
+        setMessage(`❌ Unable to determine server status: ${result.message || 'Unknown error'}`);
+        setSelectedOption('off');
+      }
+      
+      // Also get scheduled shutdown time and update radio selection
+      const scheduledTime = await getScheduledTime();
+      
+      // If server is on and there's a scheduled time, set appropriate radio button
+      if (serverIsOn && scheduledTime) {
+        const now = Date.now() / 1000;
+        const remainingSeconds = scheduledTime - now;
+        const remainingHours = Math.ceil(remainingSeconds / 3600);
+        
+        // Set the radio button based on remaining time
+        if (remainingHours >= 2 && remainingHours <= 4) {
+          setSelectedOption(`${remainingHours}hr`);
+        } else {
+          setSelectedOption('manual');
+        }
+      } else if (serverIsOn && !scheduledTime) {
+        setSelectedOption('manual');
+      }
+      
+    } catch (error) {
+      console.error('Error checking server status:', error);
+      setMessage('Error checking server status - assuming server is off');
+      setSelectedOption('off');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Start countdown timer based on scheduled time
+  const startTimer = (useScheduledTime = null) => {
     // Clear any existing timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
     }
 
-    setTimeRemaining(minutes * 60); // Convert minutes to seconds
+    const targetTime = useScheduledTime || scheduledTime;
+    if (!targetTime) {
+      setTimeRemaining(0);
+      return;
+    }
     
     timerRef.current = setInterval(() => {
-      setTimeRemaining(prev => {
-        if (prev <= 1) {
-          // Timer expired, turn off server
-          controlSynology('power-off');
-          setSelectedOption('off');
-          setMessage('Timer expired - turning off Synology server');
-          clearInterval(timerRef.current);
-          return 0;
-        }
-        return prev - 1;
-      });
+      const now = Date.now() / 1000; // Convert to seconds
+      const remaining = Math.max(0, Math.floor(targetTime - now));
+      
+      setTimeRemaining(remaining);
+      
+      if (remaining <= 0) {
+        // Timer expired, turn off server
+        controlSynology('power-off');
+        setSelectedOption('off');
+        setScheduledTime(null);
+        setMessage('Synology Plex Server off');
+        clearInterval(timerRef.current);
+      }
     }, 1000);
   };
 
@@ -77,40 +264,101 @@ const PlexSvr = () => {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    setTimeRemaining(0);
 
     if (value === 'off') {
-      // Turn off immediately
+      // Turn off immediately and cancel any scheduled shutdown
+      await cancelScheduledShutdown();
       await controlSynology('power-off');
+      setTimeRemaining(0);
     } else if (value === 'manual') {
-      // Turn on and leave on
-      await controlSynology('power-on');
-    } else if (value.endsWith('min')) {
-      // Timed options - turn on and start timer
-      const minutes = parseInt(value.replace('min', ''));
-      const success = await controlSynology('power-on');
+      // Turn on and leave on (cancel any scheduled shutdown)
+      await cancelScheduledShutdown();
+      
+      // Check if server is already running
+      const serverRunning = await isServerCurrentlyRunning();
+      if (serverRunning) {
+        setMessage('✅ Server is running.');
+      } else {
+        await controlSynology('power-on');
+      }
+      setTimeRemaining(0);
+    } else if (value.endsWith('hr')) {
+      // Timed options - turn on and schedule shutdown
+      const hours = parseInt(value.replace('hr', ''));
+      
+      // Check if server is already running
+      const serverRunning = await isServerCurrentlyRunning();
+      let success = true;
+      
+      if (serverRunning) {
+        setMessage(`Server already running - scheduled to turn off in ${hours} hours`);
+      } else {
+        success = await controlSynology('power-on');
+        if (success) {
+          setMessage(`Server turned on for ${hours} hours`);
+        }
+      }
+      
       if (success) {
-        startTimer(minutes);
-        setMessage(`Server turned on for ${minutes} minutes`);
+        const newScheduledTime = await scheduleShutdown(hours);
+        if (newScheduledTime) {
+          // Use the fresh scheduled time directly to avoid React state timing issues
+          startTimer(newScheduledTime);
+        }
       }
     }
   };
 
   // Format time remaining for display
   const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    
+    let countdown = '';
+    if (hours > 0) {
+      countdown = `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    } else {
+      countdown = `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    // Add wall clock time if we have a scheduled time
+    if (scheduledTime) {
+      const shutoffTime = new Date(scheduledTime * 1000).toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+      return `${countdown} remaining (turns off at ${shutoffTime})`;
+    }
+    
+    return countdown;
   };
 
-  // Cleanup timer on unmount
+  // Cleanup timer on unmount and check server status on mount
   useEffect(() => {
+    // Check server status when component mounts
+    checkServerStatus();
+    
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Start timer when scheduledTime changes
+  useEffect(() => {
+    if (scheduledTime) {
+      startTimer();
+    } else {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+      setTimeRemaining(0);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scheduledTime]);
 
   return (
     <div className="plex-svr-page">
@@ -124,7 +372,17 @@ const PlexSvr = () => {
       
       <Container>
         <Segment>
-          {message && (
+          {isLoading && (
+            <Message icon>
+              <Icon name="circle notched" loading />
+              <Message.Content>
+                <Message.Header>Loading</Message.Header>
+                Checking server status...
+              </Message.Content>
+            </Message>
+          )}
+          
+          {!isLoading && message && (
             <Message>
               {message}
               {timeRemaining > 0 && (
@@ -143,33 +401,37 @@ const PlexSvr = () => {
                 value='off'
                 checked={selectedOption === 'off'}
                 onChange={handleChange}
+                disabled={isLoading}
               />
             </Form.Field>
             <Form.Field>
               <Radio
-                label='On for 2 minutes'
+                label='On for 2 hours'
                 name='plexServerOption'
-                value='2min'
-                checked={selectedOption === '2min'}
+                value='2hr'
+                checked={selectedOption === '2hr'}
                 onChange={handleChange}
+                disabled={isLoading}
               />
             </Form.Field>
             <Form.Field>
               <Radio
-                label='On for 3 minutes'
+                label='On for 3 hours'
                 name='plexServerOption'
-                value='3min'
-                checked={selectedOption === '3min'}
+                value='3hr'
+                checked={selectedOption === '3hr'}
                 onChange={handleChange}
+                disabled={isLoading}
               />
             </Form.Field>
             <Form.Field>
               <Radio
-                label='On for 4 minutes'
+                label='On for 4 hours'
                 name='plexServerOption'
-                value='4min'
-                checked={selectedOption === '4min'}
+                value='4hr'
+                checked={selectedOption === '4hr'}
                 onChange={handleChange}
+                disabled={isLoading}
               />
             </Form.Field>
             <Form.Field>
@@ -179,6 +441,7 @@ const PlexSvr = () => {
                 value='manual'
                 checked={selectedOption === 'manual'}
                 onChange={handleChange}
+                disabled={isLoading}
               />
             </Form.Field>
           </Form>
