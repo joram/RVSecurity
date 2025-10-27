@@ -181,15 +181,20 @@ const PlexSvr = () => {
           setMessage("✅ Server is running.");
         } else {
           setSelectedOption('off');
-          // Check if ethernet is active for simplified message
-          const ethernetActive = result.status && 
-                                result.status.ethernet && 
-                                result.status.ethernet.toLowerCase().includes('active');
+          // Check if ethernet is active by parsing the message text
+          let ethernetActive = false;
+          if (result.message) {
+            const messageText = String(result.message).toLowerCase();
+            // Look for "ethernet: active" or "ethernet:      active" in the message
+            ethernetActive = messageText.includes('ethernet:') && 
+                           messageText.includes('active') &&
+                           !messageText.includes('inactive');
+          }
           
           if (ethernetActive) {
             setMessage("⏹️ Server is offline and ready to startup");
           } else {
-            setMessage("⏹️ Server is offline and must be restarted manually. It's behind TV set)");
+            setMessage("❌ Synology Plex server is offline and must be restarted manually. It's behind TV set)");
           }
         }
       } else {
@@ -383,7 +388,7 @@ const PlexSvr = () => {
           )}
           
           {!isLoading && message && (
-            <Message>
+            <Message negative={message.includes('must be restarted manually')}>
               {message}
               {timeRemaining > 0 && (
                 <div style={{ marginTop: '10px', fontWeight: 'bold' }}>
