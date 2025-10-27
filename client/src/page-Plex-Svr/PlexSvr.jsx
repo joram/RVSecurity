@@ -194,7 +194,7 @@ const PlexSvr = () => {
           if (ethernetActive) {
             setMessage("⏹️ Server is offline and ready to startup");
           } else {
-            setMessage("❌ Synology Plex server is offline and must be restarted manually. It's behind TV set)");
+            setMessage("❌ Synology Plex server is offline and must be restarted manually. It's behind TV set.");
           }
         }
       } else {
