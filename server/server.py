@@ -10,6 +10,12 @@ import socket
 import requests
 import json
 import shutil
+import signal
+import atexit
+import logging
+# Initialize alarm-related global variables
+alarm_mqtt_available = False
+
 # Import alarm system from the rv/alarm directory (optional)
 try:
     sys.path.append('/home/tblank/code/tblank1024/rv/alarm')
@@ -21,6 +27,9 @@ except ImportError as e:
     print("Web alarm buttons will work for state tracking only")
     ALARM_AVAILABLE = False
     alarm = None
+    # Check if we should use MQTT for alarm communication
+    alarm_mqtt_available = True
+    print("Will attempt MQTT communication with alarm container")
 from rvglue import MQTTClient
 import rvglue
 from typing import Annotated
@@ -65,6 +74,8 @@ interior_alarm_state = False
 
 # Initialize alarm system
 alarm_system = None
+alarm_thread = None
+alarm_thread_stop_event = None
 
 # Internet Connection State Management
 current_internet_connection = "none"  # Tracks current connection: "none", "cellular", "wifi", "starlink", "wired"
@@ -115,50 +126,269 @@ def schedule_shutdown_timer(delay_seconds):
 
 def initialize_alarm_system():
     """Initialize the alarm system with error handling"""
-    global alarm_system
-    try:
-        debug_level = 0  # Set to 0 for normal operation, 1 for debug
-        alarm_system = alarm.Alarm(debug_level)
-        print("Alarm system initialized successfully")
+    global alarm_system, alarm_thread, alarm_thread_stop_event, alarm_mqtt_available
+    
+    # First check if we have direct alarm module access
+    if ALARM_AVAILABLE and alarm is not None:
+        try:
+            debug_level = 0  # Set to 0 for normal operation, 1 for debug
+            alarm_system = alarm.Alarm(debug_level)
+            print("Alarm system initialized successfully (direct GPIO)")
+            
+            # Start the alarm monitoring thread
+            alarm_thread_stop_event = threading.Event()
+            alarm_thread = threading.Thread(target=alarm_monitoring_loop, daemon=True)
+            alarm_thread.start()
+            print("Alarm monitoring thread started")
+            
+            return True
+        except Exception as e:
+            print(f"Warning: Could not initialize direct GPIO alarm system: {e}")
+            alarm_system = None
+    
+    # If direct GPIO failed, check if MQTT communication is available
+    if alarm_mqtt_available:
+        print("Direct GPIO alarm not available, using MQTT communication")
+        print("Web alarm buttons will control physical alarms via MQTT")
+        alarm_system = None  # Make sure it's None for MQTT mode
         return True
-    except Exception as e:
-        print(f"Warning: Could not initialize alarm system: {e}")
-        print("Web alarm buttons will update state but won't control physical alarms")
+    else:
+        print("No alarm system available - web alarm buttons will work for state tracking only")
         alarm_system = None
         return False
 
-def set_alarm(alarm_type, state):
-    """Set alarm state - works with or without physical alarm system"""
-    global alarm_system
+def alarm_monitoring_loop():
+    """Background thread function that runs the alarm system monitoring loop"""
+    global alarm_system, alarm_thread_stop_event
     
-    # Always update the web interface state
+    if alarm_system is None:
+        print("No direct alarm system available, monitoring loop not started")
+        return
+    
+    print("Starting alarm monitoring loop in background thread")
+    
+    while not alarm_thread_stop_event.is_set():
+        try:
+            # Run one iteration of the alarm monitoring
+            if alarm_system.debuglevel == 10:
+                alarm_system._InternalTest()
+            else:
+                if alarm_system.InteriorState == alarm.States.OFF and alarm_system.BikeState == alarm.States.OFF and alarm_system.LoopCount > 10000:
+                    # Don't let the LoopCount get too big
+                    alarm_system.LoopCount = 1      
+                else:
+                    alarm_system.LoopCount += 1
+                    
+                alarm_system.LoopTime = time.time()
+                alarm_system._check_buttons()    
+                alarm_system._check_bike_wire()
+                alarm_system._check_interior()
+                alarm_system._update_timed_transitions()
+                alarm_system._display()
+                
+                # Sync physical alarm states with web interface
+                sync_alarm_states()
+                
+            # Sleep between iterations
+            time.sleep(alarm_system.LOOPDELAY)
+            
+        except Exception as e:
+            print(f"Error in alarm monitoring loop: {e}")
+            time.sleep(1)  # Sleep longer on error to prevent spam
+    
+    print("Alarm monitoring loop stopped")
+
+def sync_alarm_states():
+    """Synchronize physical alarm states with web interface state variables"""
+    global alarm_system, bike_alarm_state, interior_alarm_state
+    
+    if alarm_system is None or alarm is None:
+        return
+    
+    # Convert physical alarm states to boolean for web interface
+    # Physical alarm is considered "on" if it's in STARTING, ON, TRIGDELAY, TRIGGERED, or SILENCED states
+    active_states = [alarm.States.STARTING, alarm.States.ON, alarm.States.TRIGDELAY, 
+                    alarm.States.TRIGGERED, alarm.States.SILENCED]
+    
+    new_bike_state = alarm_system.BikeState in active_states
+    new_interior_state = alarm_system.InteriorState in active_states
+    
+    # Update web interface states if they changed
+    if new_bike_state != bike_alarm_state:
+        bike_alarm_state = new_bike_state
+        print(f"Physical bike alarm state changed to: {'ON' if new_bike_state else 'OFF'}")
+    
+    if new_interior_state != interior_alarm_state:
+        interior_alarm_state = new_interior_state
+        print(f"Physical interior alarm state changed to: {'ON' if new_interior_state else 'OFF'}")
+
+def cleanup_alarm_system():
+    """Clean up alarm system and stop monitoring thread"""
+    global alarm_system, alarm_thread, alarm_thread_stop_event
+    
+    if alarm_thread_stop_event is not None:
+        print("Stopping alarm monitoring thread...")
+        alarm_thread_stop_event.set()
+        
+    if alarm_thread is not None and alarm_thread.is_alive():
+        alarm_thread.join(timeout=5)  # Wait up to 5 seconds for thread to stop
+        if alarm_thread.is_alive():
+            print("Warning: Alarm thread did not stop gracefully")
+        else:
+            print("Alarm monitoring thread stopped")
+    
+    alarm_system = None
+    alarm_thread = None
+    alarm_thread_stop_event = None
+
+def set_alarm_via_mqtt(alarm_type, state):
+    """Set alarm state via MQTT communication with alarm container"""
+    try:
+        import paho.mqtt.client as mqtt
+        
+        # Create MQTT client for sending alarm commands
+        mqtt_client = mqtt.Client()
+        
+        # Set connection timeout
+        mqtt_client.connect("localhost", 1883, 60)
+        
+        # Wait a moment for connection to establish
+        import time
+        time.sleep(0.1)
+        
+        # Send alarm command via MQTT
+        topic = f"rv/alarm/{alarm_type}/command"
+        payload = "on" if state else "off"
+        
+        result = mqtt_client.publish(topic, payload)
+        
+        # Wait for message to be sent
+        time.sleep(0.1)
+        mqtt_client.disconnect()
+        
+        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+            print(f"MQTT alarm command sent: {alarm_type} -> {payload}")
+            return True
+        else:
+            print(f"Failed to send MQTT alarm command: {result.rc}")
+            return False
+            
+    except Exception as e:
+        print(f"Error sending MQTT alarm command: {e}")
+        return False
+
+def get_alarm_status_via_mqtt():
+    """Get current alarm status via MQTT from alarm container"""
     global bike_alarm_state, interior_alarm_state
+    
+    try:
+        import paho.mqtt.client as mqtt
+        import time
+        
+        # Store the received status
+        status_received = {}
+        status_complete = False
+        
+        def on_connect(client, userdata, flags, rc):
+            if rc == 0:
+                # Subscribe to status topics
+                client.subscribe("rv/alarm/bike/status")
+                client.subscribe("rv/alarm/interior/status")
+            
+        def on_message(client, userdata, msg):
+            nonlocal status_received, status_complete
+            topic = msg.topic
+            payload = msg.payload.decode('utf-8')
+            
+            if topic == "rv/alarm/bike/status":
+                status_received["bike"] = payload == "on"
+            elif topic == "rv/alarm/interior/status":
+                status_received["interior"] = payload == "on"
+            
+            # Check if we have both statuses
+            if "bike" in status_received and "interior" in status_received:
+                status_complete = True
+        
+        mqtt_client = mqtt.Client()
+        mqtt_client.on_connect = on_connect
+        mqtt_client.on_message = on_message
+        
+        mqtt_client.connect("localhost", 1883, 60)
+        mqtt_client.loop_start()
+        
+        # Wait for status messages (with timeout)
+        timeout = 2.0  # 2 second timeout
+        start_time = time.time()
+        while not status_complete and (time.time() - start_time) < timeout:
+            time.sleep(0.1)
+        
+        mqtt_client.loop_stop()
+        mqtt_client.disconnect()
+        
+        if status_complete:
+            print(f"MQTT alarm status received: {status_received}")
+            return status_received
+        else:
+            print("Timeout waiting for MQTT alarm status")
+            # Fall back to web interface state
+            return {"bike": bike_alarm_state, "interior": interior_alarm_state}
+            
+    except Exception as e:
+        print(f"Error getting MQTT alarm status: {e}")
+        # Fall back to web interface state
+        return {"bike": bike_alarm_state, "interior": interior_alarm_state}
+
+def set_alarm(alarm_type, state):
+    """Set alarm state - works with direct GPIO, MQTT, or web-only mode"""
+    global alarm_system, bike_alarm_state, interior_alarm_state
+    
+    # Always update the web interface state first
     if alarm_type == "bike":
         bike_alarm_state = state
+        print(f"Web bike alarm {'activated' if state else 'deactivated'}")
     elif alarm_type == "interior":
         interior_alarm_state = state
+        print(f"Web interior alarm {'activated' if state else 'deactivated'}")
     
-    # Try to control physical alarm if available
+    print(f"DEBUG: ALARM_AVAILABLE={ALARM_AVAILABLE}, alarm_system is None: {alarm_system is None}")
+    
+    # Try to control physical alarm - first try direct GPIO access
     if alarm_system is not None:
         try:
             if alarm_type == "bike":
                 if state:
                     alarm_system.set_state(alarm.AlarmTypes.Bike, alarm.States.STARTING)
-                    print("Physical bike alarm activated")
+                    print("Physical bike alarm activated (direct GPIO)")
                 else:
                     alarm_system.set_state(alarm.AlarmTypes.Bike, alarm.States.OFF)
-                    print("Physical bike alarm deactivated")
+                    print("Physical bike alarm deactivated (direct GPIO)")
             elif alarm_type == "interior":
                 if state:
                     alarm_system.set_state(alarm.AlarmTypes.Interior, alarm.States.STARTING)
-                    print("Physical interior alarm activated")
+                    print("Physical interior alarm activated (direct GPIO)")
                 else:
                     alarm_system.set_state(alarm.AlarmTypes.Interior, alarm.States.OFF)
-                    print("Physical interior alarm deactivated")
+                    print("Physical interior alarm deactivated (direct GPIO)")
+            return
         except Exception as e:
-            print(f"Error controlling physical alarm: {e}")
-    else:
-        print(f"Web {alarm_type} alarm {'activated' if state else 'deactivated'} (physical alarm not available)")
+            print(f"Error controlling physical alarm via GPIO: {e}")
+    
+    # If direct GPIO failed or unavailable, try MQTT communication
+    # Try MQTT if alarm_system is None (running in container mode)
+    print(f"DEBUG: Checking MQTT path, alarm_system is None: {alarm_system is None}")
+    if alarm_system is None:  # Try MQTT if direct alarm system isn't available
+        print("DEBUG: Attempting MQTT communication...")
+        try:
+            if set_alarm_via_mqtt(alarm_type, state):
+                print(f"Physical {alarm_type} alarm {'activated' if state else 'deactivated'} (via MQTT)")
+                return
+            else:
+                print(f"Failed to control physical alarm via MQTT")
+        except Exception as e:
+            print(f"Exception in MQTT communication: {e}")
+    
+    # Fallback to web-only mode
+    print(f"Physical alarm not available - web state updated only")
 
 class AlarmPostData(BaseModel):
     alarm: str
@@ -194,8 +424,52 @@ async def alarm_endpoint(data: Annotated[AlarmPostData, Body()]) -> dict:
 
 @app.get("/api/alarmget")
 async def alarms() -> dict:
-    global bike_alarm_state, interior_alarm_state
-    return {"bike": bike_alarm_state, "interior": interior_alarm_state}
+    global bike_alarm_state, interior_alarm_state, alarm_system
+    
+    result = {
+        "bike": bike_alarm_state, 
+        "interior": interior_alarm_state,
+        "physical_alarm_available": alarm_system is not None
+    }
+    
+    # Add detailed physical alarm states if available
+    if alarm_system is not None:
+        result["physical_states"] = {
+            "bike": alarm_system.BikeState.name,
+            "interior": alarm_system.InteriorState.name
+        }
+    else:
+        # Try to get status via MQTT if direct access not available
+        try:
+            mqtt_status = get_alarm_status_via_mqtt()
+            result["mqtt_status"] = mqtt_status
+            result["mqtt_available"] = True
+            # Update local state with MQTT status if available
+            if mqtt_status:
+                result["bike"] = mqtt_status.get("bike", bike_alarm_state)
+                result["interior"] = mqtt_status.get("interior", interior_alarm_state)
+        except Exception as e:
+            print(f"Error getting MQTT alarm status in API: {e}")
+            result["mqtt_available"] = False
+    
+    return result
+
+@app.post("/api/alarm/sync")
+async def sync_alarm_states_manual() -> dict:
+    """Manually trigger synchronization of physical alarm states with web interface"""
+    if alarm_system is not None:
+        sync_alarm_states()
+        return {
+            "status": "synced", 
+            "bike": bike_alarm_state, 
+            "interior": interior_alarm_state,
+            "physical_states": {
+                "bike": alarm_system.BikeState.name,
+                "interior": alarm_system.InteriorState.name
+            }
+        }
+    else:
+        return {"status": "no_physical_alarm", "bike": bike_alarm_state, "interior": interior_alarm_state}
 
 @app.post("/api/wifi-config")
 async def wifi_config(data: Annotated[WiFiConfigData, Body()]) -> WiFiConfigResponse:
@@ -1407,6 +1681,19 @@ if os.path.exists("build") and os.path.isdir("build"):
 
 
 if __name__ == "__main__":
+    
+    # Register cleanup functions
+    atexit.register(cleanup_alarm_system)
+    
+    def signal_handler(signum, frame):
+        print(f"Received signal {signum}, cleaning up...")
+        cleanup_alarm_system()
+        sys.exit(0)
+    
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
     #kick off threads here  
     # MQTTClient("pub","localhost", 1883, "dgn_variables.json",'_var', 'RVC', debug) 
     debug = 0
@@ -1431,5 +1718,9 @@ if __name__ == "__main__":
    
     print(constants["IPADDR"], constants["PORT"])
     
-
-    uvicorn.run(app, host="0.0.0.0", port=int(constants["PORT"]), log_level="warning")
+    try:
+        uvicorn.run(app, host="0.0.0.0", port=int(constants["PORT"]), log_level="warning")
+    except KeyboardInterrupt:
+        print("Server interrupted by user")
+    finally:
+        cleanup_alarm_system()

@@ -31,6 +31,8 @@ RUN ln -sf /usr/share/zoneinfo/America/Los_Angeles /usr/share/zoneinfo/PST8PDT
 WORKDIR /app/rvsecurity/server
 COPY server/setup.py .
 RUN python3 -m pip install --use-pep517 .
+# Install GPIO libraries for alarm system integration (after setup.py)
+RUN python3 -m pip install gpiozero lgpio
 
 FROM reactbase
 WORKDIR /app/rvsecurity
