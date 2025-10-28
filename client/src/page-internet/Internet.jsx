@@ -1,3 +1,54 @@
+/**
+ * RV Security Internet Connection Management Page
+ * 
+ * This page provides a unified interface for managing multiple internet connection types
+ * in an RV environment. It controls both USB hub ports and Kasa power strip outlets
+ * to enable/disable different internet connection hardware.
+ * 
+ * === SUPPORTED CONNECTION TYPES ===
+ * - Cellular: USB port 1, basic cellular modem
+ * - Cellular + Amp: USB port 1 + Kasa port 1 (cellular with signal amplifier)
+ * - WiFi: USB port 2, WiFi adapter
+ * - Starlink: USB port 3 + Kasa port 6 (satellite internet)
+ * - Wired: USB port 4, ethernet adapter
+ * - None: All ports off
+ * 
+ * === HOW IT WORKS ===
+ * 1. User selects a connection type via radio buttons
+ * 2. System automatically executes a 3-step process:
+ *    a) Power Control: Activates the correct USB port and Kasa outlets
+ *    b) Initialization Wait: Waits for hardware to initialize (varies by type)
+ *    c) Connectivity Test: Pings 8.8.8.8 to verify internet connectivity
+ * 
+ * === USB HUB CONTROL ===
+ * - Uses a CoolGear USB hub with ASCII command interface
+ * - Implements mutual exclusion (only one port active at a time)
+ * - Each connection type maps to a specific USB port
+ * - Initialization delays vary by connection type (cellular: 5s, starlink: 20s, etc.)
+ * 
+ * === KASA POWER STRIP INTEGRATION ===
+ * - Port 1: Cellular signal amplifier (only for cellular-amp)
+ * - Port 6: Starlink power supply (only for starlink)
+ * - All other connection types: both Kasa ports OFF
+ * - Provides power consumption monitoring
+ * 
+ * === CONNECTIVITY TESTING ===
+ * - Uses system ping command to 8.8.8.8
+ * - Connection-specific settling delays before testing
+ * - Real-time status updates with success/warning/error states
+ * 
+ * === WIFI CONFIGURATION ===
+ * - Separate section for configuring WiFi credentials
+ * - Communicates with Raspberry Pi Zero 2W bridge device
+ * - Supports permanent profile storage
+ * 
+ * === STATE MANAGEMENT ===
+ * - Loads current connection state on page load
+ * - Supports operation interruption/cancellation
+ * - Auto-tests connectivity when status is unknown
+ * - Real-time power consumption monitoring for Kasa outlets
+ */
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Form, Button, Message, Card, Header, Icon, Segment, Radio, TextArea, Checkbox } from 'semantic-ui-react';
 import './Internet.css';

@@ -10,7 +10,6 @@ import socket
 import requests
 import json
 import shutil
-from pythonping import ping
 #import alarm
 from rvglue import MQTTClient
 import rvglue
@@ -435,23 +434,32 @@ def get_usb_hub_controller():
         return None
 
 def test_internet_connectivity(connection_type="generic", timeout=5):
-    """Test internet connectivity using pythonping to 8.8.8.8."""
+    """Test internet connectivity using system ping command to 8.8.8.8."""
     test_results = {
         'connected': False,
         'message': 'Testing...'
     }
     
     try:
-        # Ping test using pythonping - single ping for speed
-        response = ping('8.8.8.8', count=1, timeout=timeout)
+        # Use system ping command - more reliable and doesn't require root privileges
+        # ping -c 1 -W timeout 8.8.8.8
+        result = subprocess.run(
+            ['ping', '-c', '1', '-W', str(timeout), '8.8.8.8'],
+            capture_output=True,
+            text=True,
+            timeout=timeout + 2  # Add buffer to subprocess timeout
+        )
         
-        if response.success():
+        if result.returncode == 0:
             test_results['connected'] = True
             test_results['message'] = f'Internet connectivity verified via {connection_type}'
         else:
             test_results['connected'] = False
             test_results['message'] = f'No internet connectivity detected via {connection_type}'
             
+    except subprocess.TimeoutExpired:
+        test_results['connected'] = False
+        test_results['message'] = f'Connectivity test timed out after {timeout} seconds'
     except Exception as e:
         test_results['connected'] = False
         test_results['message'] = f'Connectivity test failed: {str(e)}'
