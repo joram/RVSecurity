@@ -10,7 +10,17 @@ import socket
 import requests
 import json
 import shutil
-#import alarm
+# Import alarm system from the rv/alarm directory (optional)
+try:
+    sys.path.append('/home/tblank/code/tblank1024/rv/alarm')
+    import alarm
+    ALARM_AVAILABLE = True
+    print("Alarm system module loaded successfully")
+except ImportError as e:
+    print(f"Alarm system not available: {e}")
+    print("Web alarm buttons will work for state tracking only")
+    ALARM_AVAILABLE = False
+    alarm = None
 from rvglue import MQTTClient
 import rvglue
 from typing import Annotated
@@ -53,6 +63,9 @@ async def index():
 bike_alarm_state = False
 interior_alarm_state = False
 
+# Initialize alarm system
+alarm_system = None
+
 # Internet Connection State Management
 current_internet_connection = "none"  # Tracks current connection: "none", "cellular", "wifi", "starlink", "wired"
 
@@ -68,7 +81,8 @@ def execute_scheduled_shutdown():
         # Call the actual shutdown command
         import subprocess
         server_dir = os.path.dirname(os.path.abspath(__file__))
-        cmd = ['python', 'synology_nas_controller.py', '--power-off', '--force']
+        password_file = os.path.join(server_dir, 'synology-password.json')
+        cmd = ['python', 'synology_nas_controller.py', '--power-off', '--force', '--config', password_file]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=15, cwd=server_dir)
         
         if result.returncode == 0:
@@ -99,6 +113,53 @@ def schedule_shutdown_timer(delay_seconds):
     shutdown_timer.start()
     print(f"Scheduled shutdown timer set for {delay_seconds} seconds")
 
+def initialize_alarm_system():
+    """Initialize the alarm system with error handling"""
+    global alarm_system
+    try:
+        debug_level = 0  # Set to 0 for normal operation, 1 for debug
+        alarm_system = alarm.Alarm(debug_level)
+        print("Alarm system initialized successfully")
+        return True
+    except Exception as e:
+        print(f"Warning: Could not initialize alarm system: {e}")
+        print("Web alarm buttons will update state but won't control physical alarms")
+        alarm_system = None
+        return False
+
+def set_alarm(alarm_type, state):
+    """Set alarm state - works with or without physical alarm system"""
+    global alarm_system
+    
+    # Always update the web interface state
+    global bike_alarm_state, interior_alarm_state
+    if alarm_type == "bike":
+        bike_alarm_state = state
+    elif alarm_type == "interior":
+        interior_alarm_state = state
+    
+    # Try to control physical alarm if available
+    if alarm_system is not None:
+        try:
+            if alarm_type == "bike":
+                if state:
+                    alarm_system.set_state(alarm.AlarmTypes.Bike, alarm.States.STARTING)
+                    print("Physical bike alarm activated")
+                else:
+                    alarm_system.set_state(alarm.AlarmTypes.Bike, alarm.States.OFF)
+                    print("Physical bike alarm deactivated")
+            elif alarm_type == "interior":
+                if state:
+                    alarm_system.set_state(alarm.AlarmTypes.Interior, alarm.States.STARTING)
+                    print("Physical interior alarm activated")
+                else:
+                    alarm_system.set_state(alarm.AlarmTypes.Interior, alarm.States.OFF)
+                    print("Physical interior alarm deactivated")
+        except Exception as e:
+            print(f"Error controlling physical alarm: {e}")
+    else:
+        print(f"Web {alarm_type} alarm {'activated' if state else 'deactivated'} (physical alarm not available)")
+
 class AlarmPostData(BaseModel):
     alarm: str
     state: bool
@@ -122,17 +183,14 @@ class ScheduleShutdownData(BaseModel):
     hours: int
 
 @app.post("/api/alarmpost")
-async def alarm(data: Annotated[AlarmPostData, Body()]) -> dict:
-    global bike_alarm_state, interior_alarm_state
+async def alarm_endpoint(data: Annotated[AlarmPostData, Body()]) -> dict:
     if debug > 0:
-        print(f"Alarm: {data.alarm} State: {data.state}")
-    if data.alarm == "bike":
-        bike_alarm_state = data.state
-    elif data.alarm == "interior":
-        interior_alarm_state = data.state
-
-    #alarm.set_alarm(data.alarm, data.state)
-    return {"status": "ok"}
+        print(f"Web alarm request: {data.alarm} State: {data.state}")
+    
+    # Use our new set_alarm function that handles both web and physical alarms
+    set_alarm(data.alarm, data.state)
+    
+    return {"status": "ok", "alarm": data.alarm, "state": data.state}
 
 @app.get("/api/alarmget")
 async def alarms() -> dict:
@@ -434,35 +492,71 @@ def get_usb_hub_controller():
         return None
 
 def test_internet_connectivity(connection_type="generic", timeout=5):
-    """Test internet connectivity using system ping command to 8.8.8.8."""
+    """Test internet connectivity using multiple methods for Docker compatibility."""
     test_results = {
         'connected': False,
         'message': 'Testing...'
     }
     
+    # Method 1: Try ping command (works on host, may fail in Docker)
     try:
-        # Use system ping command - more reliable and doesn't require root privileges
-        # ping -c 1 -W timeout 8.8.8.8
         result = subprocess.run(
             ['ping', '-c', '1', '-W', str(timeout), '8.8.8.8'],
             capture_output=True,
             text=True,
-            timeout=timeout + 2  # Add buffer to subprocess timeout
+            timeout=timeout + 2
         )
         
         if result.returncode == 0:
             test_results['connected'] = True
-            test_results['message'] = f'Internet connectivity verified via {connection_type}'
+            test_results['message'] = f'Internet connectivity verified via {connection_type} (ping)'
+            return test_results
         else:
-            test_results['connected'] = False
-            test_results['message'] = f'No internet connectivity detected via {connection_type}'
+            # Ping failed, but don't return yet - try other methods
+            ping_error = result.stderr.strip() if result.stderr else "ping failed"
             
     except subprocess.TimeoutExpired:
-        test_results['connected'] = False
-        test_results['message'] = f'Connectivity test timed out after {timeout} seconds'
+        ping_error = "ping timed out"
     except Exception as e:
-        test_results['connected'] = False
-        test_results['message'] = f'Connectivity test failed: {str(e)}'
+        ping_error = f"ping error: {str(e)}"
+    
+    # Method 2: Try curl as fallback (better for Docker)
+    try:
+        result = subprocess.run(
+            ['curl', '--connect-timeout', str(timeout), '--max-time', str(timeout), 
+             '-s', '-o', '/dev/null', '-w', '%{http_code}', 'http://8.8.8.8'],
+            capture_output=True,
+            text=True,
+            timeout=timeout + 2
+        )
+        
+        if result.returncode == 0:
+            # Any HTTP response (even error codes) indicates connectivity
+            test_results['connected'] = True
+            test_results['message'] = f'Internet connectivity verified via {connection_type} (http)'
+            return test_results
+        else:
+            curl_error = result.stderr.strip() if result.stderr else "http test failed"
+            
+    except subprocess.TimeoutExpired:
+        curl_error = "http test timed out"
+    except Exception as e:
+        curl_error = f"http test error: {str(e)}"
+    
+    # Method 3: Try Python socket connection as final fallback
+    try:
+        import socket
+        sock = socket.create_connection(("8.8.8.8", 53), timeout=timeout)
+        sock.close()
+        test_results['connected'] = True
+        test_results['message'] = f'Internet connectivity verified via {connection_type} (socket)'
+        return test_results
+    except Exception as socket_error:
+        socket_error_msg = str(socket_error)
+    
+    # All methods failed
+    test_results['connected'] = False
+    test_results['message'] = f'No internet connectivity detected via {connection_type} (ping: {ping_error}, http: {curl_error}, socket: {socket_error_msg})'
     
     return test_results
 
@@ -1232,9 +1326,10 @@ async def debug_synology_control(action: str):
         
         # Get the current directory (server directory)
         server_dir = os.path.dirname(os.path.abspath(__file__))
+        password_file = os.path.join(server_dir, 'synology-password.json')
         
         # Use the command line interface for faster response
-        cmd = ['python', 'synology_nas_controller.py', f'--{action}']
+        cmd = ['python', 'synology_nas_controller.py', f'--{action}', '--config', password_file]
         
         # Add --force flag for power-off to skip confirmation prompt
         if action == 'power-off':
@@ -1324,6 +1419,10 @@ if __name__ == "__main__":
     print("Detecting current internet connection state...")
     detected_connection = detect_current_internet_connection()
     print(f"Server startup: Current internet connection is '{detected_connection}'")
+
+    # Initialize alarm system
+    print("Initializing alarm system...")
+    initialize_alarm_system()
 
     # "0.0.0.0" => accept requests from any IP addr
     # default port is 8000.  Dockerfile sets port = 80 using environment variable

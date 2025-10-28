@@ -180,12 +180,12 @@ class SynologyNASController:
         
         return None
     
-    def _load_password_file(self, password_file: str) -> Optional[Dict[str, Any]]:
+    def _load_password_file(self, password_file: str) -> dict:
         """
-        Load password from synology-password.json file.
+        Load password from file if it exists.
         
         Args:
-            password_file (str): Path to password file
+            password_file: Path to the password file
             
         Returns:
             dict or None: Password data or None if file not found

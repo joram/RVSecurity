@@ -23,6 +23,8 @@ RUN apt-get update && apt-get install -y git
 RUN apt-get update && apt-get install -y tzdata
 # Install USB management tools for cellular modem handling
 RUN apt-get update && apt-get install -y usbutils modemmanager
+# Install network tools for internet connectivity testing
+RUN apt-get update && apt-get install -y iputils-ping iproute2 curl
 # Create PST8PDT timezone link to handle Kasa device timezone format
 RUN ln -sf /usr/share/zoneinfo/America/Los_Angeles /usr/share/zoneinfo/PST8PDT
 
@@ -39,6 +41,11 @@ COPY --from=constants /app/server/constants.json server/.
 # Copy server files
 COPY server/server.py server/.
 COPY server/server_calcs.py server/.
+# Copy Synology NAS controller for Plex server management
+COPY server/synology_nas_controller.py server/.
+COPY server/synology_nas_config.json server/.
+# Copy Synology authentication credentials (contains sensitive data)
+COPY server/synology-password.json server/.
 # Copy Kasa power strip controller (blocking version only)
 COPY server/kasa_power_strip.py server/.
 # Copy USB modem manager for cellular modem handling
