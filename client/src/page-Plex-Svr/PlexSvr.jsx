@@ -1,3 +1,49 @@
+/*
+ * Plex Server Control Interface
+ * ============================
+ * 
+ * This webpage provides a user-friendly interface to control a Synology NAS server
+ * that hosts a Plex media server for power management and energy savings.
+ * 
+ * HOW IT WORKS:
+ * 
+ * 1. SERVER COMMUNICATION:
+ *    - Communicates with a backend API server that manages the physical Synology NAS
+ *    - Uses REST API calls to check status, power on/off, and schedule shutdowns
+ *    - Backend handles Wake-on-LAN for powering on and SSH commands for shutdown
+ * 
+ * 2. POWER STATES:
+ *    - OFF: Server is completely powered down
+ *    - ON (Manual): Server is on and stays on until manually turned off
+ *    - ON (Timed): Server is on for a specific duration (2, 3, or 4 hours)
+ * 
+ * 3. AUTOMATIC SHUTDOWN:
+ *    - Server-side timers handle automatic shutdown (not client-side)
+ *    - Scheduled shutdown time is stored on the server for reliability
+ *    - Client displays countdown timer and wall clock shutdown time
+ *    - Automatic shutdown works even if browser is closed
+ * 
+ * 4. STATUS DETECTION:
+ *    - Differentiates between server:
+ *      - being on
+ *      - just network bd on and ready for wake-on-LAN packet
+ *      - unreachable/offline (either powered off or network bd off)
+ *    - Checks for active services (DSM web interface, authentication, etc.)
+ *    - Displays appropriate messages based on ethernet connectivity status
+ * 
+ * 5. USER INTERFACE:
+ *    - Radio buttons for power state selection
+ *    - Real-time status messages with color coding
+ *    - Live countdown timer with wall clock time display
+ *    - Error indicators for manual restart situations
+ * 
+ * 6. SMART BEHAVIOR:
+ *    - Avoids unnecessary power commands if server is already in desired state
+ *    - Persists radio button selection across page reloads
+ *    - Handles network errors and provides user feedback
+ *    - Updates timer display when switching between timed options
+ */
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Header, Icon, Form, Radio, Container, Segment, Message } from 'semantic-ui-react';
 import './PlexSvr.css';
@@ -11,11 +57,73 @@ const PlexSvr = () => {
   const [isLoading, setIsLoading] = useState(true);
   const timerRef = useRef(null);
 
+  // Control Kasa power outlet 4 (for additional power management)
+  const controlKasaOutlet4 = async (action) => {
+    try {
+      const response = await fetch(`${getServerUrl()}/api/debug/kasa/4`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: action }),
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`Kasa outlet 4 ${action}: ${result.success ? 'SUCCESS' : 'FAILED'}`);
+        if (result.success) {
+          console.log(`Kasa outlet 4 message: ${result.message}`);
+        }
+        return result.success;
+      }
+    } catch (error) {
+      console.error(`Error controlling Kasa outlet 4: ${error.message}`);
+    }
+    return false;
+  };
+
+  // Control multiple Kasa outlets (2=TV, 3=Soundbar, 4=Synology)
+  const controlKasaEntertainmentSystem = async (action) => {
+    console.log(`Turning ${action} entertainment system outlets: 2 (TV), 3 (Soundbar), 4 (Synology)`);
+    
+    const outlets = [2, 3, 4];
+    const results = await Promise.all(
+      outlets.map(async (outlet) => {
+        try {
+          const response = await fetch(`${getServerUrl()}/api/debug/kasa/${outlet}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ action: action }),
+          });
+          
+          if (response.ok) {
+            const result = await response.json();
+            console.log(`Kasa outlet ${outlet} ${action}: ${result.success ? 'SUCCESS' : 'FAILED'}`);
+            if (result.success) {
+              console.log(`Kasa outlet ${outlet} message: ${result.message}`);
+            }
+            return { outlet, success: result.success };
+          }
+        } catch (error) {
+          console.error(`Error controlling Kasa outlet ${outlet}: ${error.message}`);
+        }
+        return { outlet, success: false };
+      })
+    );
+    
+    const successCount = results.filter(r => r.success).length;
+    console.log(`Entertainment system power ${action}: ${successCount}/${outlets.length} outlets succeeded`);
+    
+    return results;
+  };
+
   // Control Synology NAS
   const controlSynology = async (action) => {
     try {
       console.log(`Sending ${action} command to Synology NAS...`);
-      setMessage(`Sending ${action} command to Synology NAS...`);
+      setMessage(`Processing...`);
       
       const response = await fetch(`${getServerUrl()}/api/debug/synology/${action}`, {
         method: 'POST',
@@ -31,7 +139,14 @@ const PlexSvr = () => {
       const result = await response.json();
       
       if (result.success) {
-        setMessage(`${action}: ${result.message}`);
+        // Use shorter, cleaner messages for user display
+        if (action === 'power-off') {
+          setMessage('Server off');
+        } else if (action === 'power-on') {
+          setMessage('Server on');
+        } else {
+          setMessage(`Done`);
+        }
         return true;
       } else {
         setMessage(`${action} failed: ${result.message}`);
@@ -178,7 +293,7 @@ const PlexSvr = () => {
         
         if (serverIsOn) {
           // Don't set the radio button here - let getScheduledTime determine if it's timed or manual
-          setMessage("✅ Server is running.");
+          setMessage("✅ Server running");
         } else {
           setSelectedOption('off');
           // Check if ethernet is active by parsing the message text
@@ -192,9 +307,11 @@ const PlexSvr = () => {
           }
           
           if (ethernetActive) {
-            setMessage("⏹️ Server is offline and ready to startup");
+            setMessage("⏹️ Server off - ready to start");
           } else {
             setMessage("❌ Synology Plex server is offline and must be restarted manually. It's behind TV set.");
+            // Turn on entertainment system outlets when ethernet is unavailable (manual restart needed)
+            controlKasaEntertainmentSystem('on');
           }
         }
       } else {
@@ -282,7 +399,7 @@ const PlexSvr = () => {
       // Check if server is already running
       const serverRunning = await isServerCurrentlyRunning();
       if (serverRunning) {
-        setMessage('✅ Server is running.');
+        setMessage('✅ Server running');
       } else {
         await controlSynology('power-on');
       }
@@ -296,11 +413,11 @@ const PlexSvr = () => {
       let success = true;
       
       if (serverRunning) {
-        setMessage(`Server already running - scheduled to turn off in ${hours} hours`);
+        setMessage(`Server on - turns off in ${hours} hours`);
       } else {
         success = await controlSynology('power-on');
         if (success) {
-          setMessage(`Server turned on for ${hours} hours`);
+          setMessage(`Server on for ${hours} hours`);
         }
       }
       
