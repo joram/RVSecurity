@@ -364,16 +364,10 @@ def HouseKeeping():
         YellowLamp = "00 Yellow Lamp"
     YellowMsg = ''
     
-    #TODO replace time with wall clock time
+    # Use current wall clock time instead of potentially stale MQTT timestamp
     local_timezone = get_localzone()
-    try:
-        timestamp = safe_float(AliasData.get("_var01Timestamp", time.time()))
-        datetime_obj = datetime.datetime.fromtimestamp(timestamp, tz=local_timezone)
-        Time_Str = datetime_obj.strftime("%Y-%m-%d %I:%M:%S %p")
-    except:
-        # Fallback to current time if timestamp is invalid
-        datetime_obj = datetime.datetime.now(tz=local_timezone)
-        Time_Str = datetime_obj.strftime("%Y-%m-%d %I:%M:%S %p")
+    datetime_obj = datetime.datetime.now(tz=local_timezone)
+    Time_Str = datetime_obj.strftime("%Y-%m-%d %I:%M:%S %p")
         
     return(RedMsg, YellowMsg, Time_Str)
 

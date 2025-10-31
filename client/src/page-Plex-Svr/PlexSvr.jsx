@@ -326,13 +326,47 @@ const PlexSvr = () => {
       if (serverIsOn && scheduledTime) {
         const now = Date.now() / 1000;
         const remainingSeconds = scheduledTime - now;
-        const remainingHours = Math.ceil(remainingSeconds / 3600);
         
-        // Set the radio button based on remaining time
-        if (remainingHours >= 2 && remainingHours <= 4) {
-          setSelectedOption(`${remainingHours}hr`);
-        } else {
+        // Calculate the original duration by determining which standard duration (2, 3, or 4 hours)
+        // the scheduled time is closest to. This preserves the original choice even when countdown
+        // goes below the initial selection.
+        const possibleDurations = [2, 3, 4]; // hours
+        let bestMatch = 'manual';
+        let smallestDifference = Infinity;
+        
+        for (const duration of possibleDurations) {
+          // Calculate what the remaining time would be if this was the original choice
+          // Allow some tolerance for processing delays and network latency
+          const expectedRemainingForDuration = duration * 3600;
+          const timeSinceScheduled = expectedRemainingForDuration - remainingSeconds;
+          
+          // If the time since scheduled is reasonable (between 0 and the full duration)
+          // and this is closer than our previous best match
+          if (timeSinceScheduled >= 0 && timeSinceScheduled <= expectedRemainingForDuration) {
+            const difference = Math.abs(expectedRemainingForDuration - (remainingSeconds + timeSinceScheduled));
+            if (difference < smallestDifference) {
+              smallestDifference = difference;
+              bestMatch = `${duration}hr`;
+            }
+          }
+        }
+        
+        // If remaining time is greater than 4 hours, it's likely a manual setting with a very long timer
+        // If less than 30 seconds, just show the closest hour option to avoid confusion
+        if (remainingSeconds > 4.5 * 3600) {
           setSelectedOption('manual');
+        } else if (remainingSeconds < 30) {
+          // For very short remaining times, determine the closest standard duration
+          const remainingHours = remainingSeconds / 3600;
+          if (remainingHours <= 2.5) {
+            setSelectedOption('2hr');
+          } else if (remainingHours <= 3.5) {
+            setSelectedOption('3hr');
+          } else {
+            setSelectedOption('4hr');
+          }
+        } else {
+          setSelectedOption(bestMatch);
         }
       } else if (serverIsOn && !scheduledTime) {
         setSelectedOption('manual');
