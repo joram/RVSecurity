@@ -16,6 +16,9 @@ import logging
 # Initialize alarm-related global variables
 alarm_mqtt_available = False
 
+# Global debug setting
+DEBUG_MODE = os.getenv('SERVER_DEBUG', '').lower() in ('true', '1', 'yes')  # Enable with SERVER_DEBUG=true
+
 # Import alarm system from the rv/alarm directory (optional)
 try:
     sys.path.append('/home/tblank/code/tblank1024/rv/alarm')
@@ -326,10 +329,12 @@ def get_alarm_status_via_mqtt():
         mqtt_client.disconnect()
         
         if status_complete:
-            print(f"MQTT alarm status received: {status_received}")
+            if DEBUG_MODE:
+                print(f"MQTT alarm status received: {status_received}")
             return status_received
         else:
-            print("Timeout waiting for MQTT alarm status")
+            if DEBUG_MODE:
+                print("Timeout waiting for MQTT alarm status")
             # Fall back to web interface state
             return {"bike": bike_alarm_state, "interior": interior_alarm_state}
             
@@ -345,12 +350,15 @@ def set_alarm(alarm_type, state):
     # Always update the web interface state first
     if alarm_type == "bike":
         bike_alarm_state = state
-        print(f"Web bike alarm {'activated' if state else 'deactivated'}")
+        if DEBUG_MODE:
+            print(f"Web bike alarm {'activated' if state else 'deactivated'}")
     elif alarm_type == "interior":
         interior_alarm_state = state
-        print(f"Web interior alarm {'activated' if state else 'deactivated'}")
+        if DEBUG_MODE:
+            print(f"Web interior alarm {'activated' if state else 'deactivated'}")
     
-    print(f"DEBUG: ALARM_AVAILABLE={ALARM_AVAILABLE}, alarm_system is None: {alarm_system is None}")
+    if DEBUG_MODE:
+        print(f"DEBUG: ALARM_AVAILABLE={ALARM_AVAILABLE}, alarm_system is None: {alarm_system is None}")
     
     # Try to control physical alarm - first try direct GPIO access
     if alarm_system is not None:
@@ -375,20 +383,25 @@ def set_alarm(alarm_type, state):
     
     # If direct GPIO failed or unavailable, try MQTT communication
     # Try MQTT if alarm_system is None (running in container mode)
-    print(f"DEBUG: Checking MQTT path, alarm_system is None: {alarm_system is None}")
+    if DEBUG_MODE:
+        print(f"DEBUG: Checking MQTT path, alarm_system is None: {alarm_system is None}")
     if alarm_system is None:  # Try MQTT if direct alarm system isn't available
-        print("DEBUG: Attempting MQTT communication...")
+        if DEBUG_MODE:
+            print("DEBUG: Attempting MQTT communication...")
         try:
             if set_alarm_via_mqtt(alarm_type, state):
-                print(f"Physical {alarm_type} alarm {'activated' if state else 'deactivated'} (via MQTT)")
+                if DEBUG_MODE:
+                    print(f"Physical {alarm_type} alarm {'activated' if state else 'deactivated'} (via MQTT)")
                 return
             else:
-                print(f"Failed to control physical alarm via MQTT")
+                if DEBUG_MODE:
+                    print(f"Failed to control physical alarm via MQTT")
         except Exception as e:
             print(f"Exception in MQTT communication: {e}")
     
     # Fallback to web-only mode
-    print(f"Physical alarm not available - web state updated only")
+    if DEBUG_MODE:
+        print(f"Physical alarm not available - web state updated only")
 
 class AlarmPostData(BaseModel):
     alarm: str
