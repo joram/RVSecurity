@@ -37,10 +37,26 @@
    130/404 = 32.2% left,  269/732 = 36.7% top  */
 .battery {
   position: absolute;
-  left: 32%;
-  top: 37%;
-  /* Scale the widget proportionally to container width.
-     clamp keeps it usable from narrow phones to desktop. */
-  transform: scale(clamp(0.45, 14vw, 0.75));
+  left: 36%;
+  top: 38%;
+  /* Size is controlled by the @media breakpoints below */
   transform-origin: top left;
+}
+
+@media (max-width: 400px) {
+  .battery {
+    transform: scale(0.75);
+  }
+}
+
+@media (min-width: 401px) and (max-width: 768px) {
+  .battery {
+    transform: scale(0.87);
+  }
+}
+
+@media (min-width: 769px) {
+  .battery {
+    transform: scale(0.99);
+  }
 }
