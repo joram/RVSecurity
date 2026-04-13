@@ -4,10 +4,10 @@ import React from 'react';
 import LiquidFillGauge from 'react-liquid-gauge';
 
 function Gauge(props) {
-    let {value, label, id, startColor, endColor} = props;
+    let {value, label, id, startColor, endColor, radius: radiusProp} = props;
     // Convert value to number and provide default
     const numericValue = value && !isNaN(value) ? Number(value) : 0;
-    const radius = 80;
+    const radius = radiusProp !== undefined ? radiusProp : 80;
     const interpolate = interpolateRgb(startColor, endColor);
     const fillColor = interpolate(numericValue/100);
     const gradientStops = [

@@ -1,8 +1,9 @@
 import React, { useEffect } from 'react';
-import { Outlet, Link } from "react-router-dom";
-import {Button, Menu} from "semantic-ui-react";
+import { Outlet, Link, useNavigate } from "react-router-dom";
+import { Button } from "semantic-ui-react";
 import { useState } from 'react';
 import { fetchFromServer, getServerUrl } from '../utils/api';
+import './layout.css';
 
 
 function TogglableButton(props) {
@@ -17,18 +18,21 @@ function TogglableButton(props) {
     setActive(state);
   }, [state])
 
-  let color = "grey";
-  if (active) {
-    color = activeColor;
-  }
- 
-  return (
-    <Button toggle color={color} onClick={handleClick}>
-      {text}
-    </Button>
-  )
+  const bg = active
+    ? (activeColor === 'blue' ? '#2185d0' : '#db2828')
+    : '#555';
 
+  return (
+    <button
+      onClick={handleClick}
+      className="nav-alarm-btn"
+      style={{ backgroundColor: bg }}
+    >
+      {text}
+    </button>
+  )
 }
+
 function tellServerAlarmStateChanged(state, alarmName){
   console.log("Alarm state changed: " + state + " " + alarmName)
   let url = `${getServerUrl()}/api/alarmpost`;
@@ -43,7 +47,6 @@ function tellServerAlarmStateChanged(state, alarmName){
       "alarm": alarmName,
     })
   })
-
 }
 
 function ToggleBikeAlarm(active) {
@@ -63,7 +66,6 @@ function Layout() {
   function getAlarmStatesFromServer(){
     fetchFromServer('/api/alarmget')
     .then(data => {
-      // console.log(data);
       setBikeAlarmState(data.bike);
       setInteriorAlarmState(data.interior);
     })
@@ -76,24 +78,22 @@ function Layout() {
     getAlarmStatesFromServer();
     const interval = setInterval(() => {
       getAlarmStatesFromServer();
-    }, 5000);  // 1000 ms = 1 second
+    }, 5000);
     return () => clearInterval(interval);
   }, [])
 
   return (
-    <div>
-      <Menu>
-          <Menu.Item as={Link} to="/">Home</Menu.Item>
-          <Menu.Item as={Link} to="/power">Power</Menu.Item>
-          <Menu.Item as={Link} to="/internet">Internet</Menu.Item>
-          <Menu.Item as={Link} to="/wifi">Plex-Svr</Menu.Item>
-          <Menu.Item as={TogglableButton} onClick={ToggleBikeAlarm} state={bikeAlarmState} text="Bike Alarm" activeColor="blue"></Menu.Item>
-          <Menu.Item as={TogglableButton} onClick={ToggleInteriorAlarm} state={interiorAlarmState} text="Interior Alarm" activeColor="red"></Menu.Item>
-      </Menu>
+    <div className="layout-root">
+      <nav className="app-nav">
+        <Link className="nav-link" to="/">Home</Link>
+        <Link className="nav-link" to="/power">Power</Link>
+        <Link className="nav-link" to="/internet">Internet</Link>
+        <Link className="nav-link" to="/wifi">Plex-Svr</Link>
+        <TogglableButton onClick={ToggleBikeAlarm} state={bikeAlarmState} text="Bike Alarm" activeColor="blue" />
+        <TogglableButton onClick={ToggleInteriorAlarm} state={interiorAlarmState} text="Interior Alarm" activeColor="red" />
+      </nav>
       <Outlet />
     </div>
-    
-    
   )
 };
 

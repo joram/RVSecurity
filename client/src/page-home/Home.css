@@ -1,195 +1,273 @@
+/* =====================================================
+   Home Page — pure widget layout, no SVG
+   Phone  (<600px): single column cards
+   MMB / tablet (≥600px): 2-column card grid
+   Desktop (≥960px): 2-column, wider cards
+   ===================================================== */
+
+/* ── Page shell ─────────────────────────────────────── */
 .Home {
   width: 100%;
-  height: 100vh;
-  position: relative;
-  overflow: auto;
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 8px;
+  background-color: #d3dff7;
+  display: flex;
+  justify-content: center;
 }
 
-.base_svg {
-  position: absolute;
-  left: 50%;
-  top: 0px !important;
-  height: 100%; 
-  width: 800px; /* Fixed width for centering */
-  padding-bottom: 90%;
-  transform: translateX(-50%);
+/* ── Centered wrapper — constrains everything ────────── */
+.home-wrapper {
+  width: 100%;
+  max-width: 900px;
+  box-sizing: border-box;
 }
 
-/* Force specific text elements to be black in Home page */
-.Home .base_svg svg text {
-  fill: black !important;
-  color: black !important;
+/* ── Header bar ─────────────────────────────────────── */
+.home-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+  background: #1a3a6b;
+  border-radius: 8px;
+  color: white;
 }
 
-.Home .base_svg svg * {
-  color: black !important;
+.home-title {
+  font-size: 1.2rem;
+  font-weight: bold;
+  letter-spacing: 0.05em;
 }
 
-/* Override color scheme for Home page */
-.Home .base_svg svg {
-  color-scheme: light !important;
+.home-time {
+  font-size: 0.95rem;
+  opacity: 0.85;
 }
 
-/* Exception: Keep battery percentage white - target battery gauge text */
-.Home #battery text {
+/* ── Card grid ──────────────────────────────────────── */
+.home-grid {
+  display: grid;
+  grid-template-columns: 1fr;          /* phone: 1 column */
+  gap: 10px;
+}
+
+@media (min-width: 600px) {
+  .home-grid {
+    grid-template-columns: 1fr 1fr;    /* MMB / tablet: 2 columns */
+  }
+}
+
+/* ── Base card ──────────────────────────────────────── */
+.home-card {
+  background: white;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.card-title {
+  font-size: 1rem;
+  font-weight: bold;
+  color: #1a3a6b;
+  border-bottom: 2px solid #d3dff7;
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Tighter vertical padding for battery and power cards */
+.home-card--battery,
+.home-card--power {
+  padding: 8px 12px;
+}
+
+/* ── Battery card ───────────────────────────────────── */
+
+/* Stats on left, rotated gauge on right — side by side */
+.battery-body {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.battery-stats {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* Gauge sits to the right, rotated so the battery stands upright */
+.battery-widget {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* size=110, aspectRatio=0.5 → rendered ~55w × 110h
+     Rotating -90° swaps width/height visually.
+     We nudge the element so its rotated bounding box doesn't bleed. */
+  transform: rotate(-90deg);
+  width: 110px;
+  height: 55px;
+}
+
+/* Keep battery % text readable after rotation */
+.home-card--battery text {
   fill: white !important;
-  color: white !important;
 }
 
-/* Gauge positioning for Home page - Common properties only */
-#battery {
-  position: absolute;
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.88rem;
+  padding: 1px 0;
+  border-bottom: 1px solid #f0f0f0;
 }
 
-#first_gauge {
-  position: absolute;
+.stat-label {
+  color: #666;
+  font-weight: 500;
 }
 
-#second_gauge {
-  position: absolute;
+.stat-value {
+  color: #222;
+  font-weight: bold;
+  text-align: right;
 }
 
-#third_gauge {
-  position: absolute;
+/* ── Power card ─────────────────────────────────────── */
+.power-row {
+  display: flex;
+  justify-content: space-around;
+  gap: 8px;
 }
 
-#fourth_gauge {
-  position: absolute;
+.power-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  padding: 5px 4px;
+  border-radius: 8px;
+  text-align: center;
 }
 
-/* ===== MOBILE MEDIA QUERIES: ORDERED FROM SMALLEST TO LARGEST ===== */
-
-/* Desktop and large screens (above 1440px) */
-@media (min-width: 1441px) {
-  .base_svg {
-    position: absolute;
-    left: 50%;
-    top: 10px !important;
-    height: 100%; 
-    width: 800px;
-    padding-bottom: 90%;
-    transform: translateX(-50%);
-  }
-  
-  /* Desktop gauge positioning and scaling */
-  #battery {
-    position: absolute;
-    left: 15px;
-    top: 95px;
-    transform: scale(1.0); /* Full size on large screens */
-  }
-
-  #first_gauge {
-    position: absolute;
-    left: 0px;
-    top: 170px;  /* Reduced from 170px */
-    transform: scale(0.6); /* Smaller on large screens */
-  }
-
-  #second_gauge {
-    position: absolute;
-    left: 170px;
-    top: 170px;  /* Reduced from 170px */
-    transform: scale(0.6);
-  }
-
-  #third_gauge {
-    position: absolute;
-    left: 0px;
-    top: 315px;  /* Reduced from 320px */
-    transform: scale(0.6);
-  }
-
-  #fourth_gauge {
-    position: absolute;
-    left: 170px;
-    top: 315px;  /* Reduced from 320px */
-    transform: scale(0.6);
-  }
+/* Icon + label on the same line */
+.power-item-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 2px;
 }
 
-/* Large mobile devices (1440px and below) */
-@media (max-width: 1440px) {
+.power-item--solar  { background: #fffbe6; border: 1px solid #f5c518; }
+.power-item--ac     { background: #f0f0ff; border: 1px solid #6b6bff; }
+.power-item--dc     { background: #f0fff4; border: 1px solid #2ecc71; }
+
+.power-icon  { font-size: 1.0rem; line-height: 1; }
+.power-label { font-size: 0.68rem; color: #555; font-weight: 600; }
+.power-value { font-size: 0.82rem; font-weight: bold; color: #222; }
+
+/* ── Tanks card ─────────────────────────────────────── */
+.tanks-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  justify-items: center;
+}
+
+.tanks-grid .gauge_label {
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+/* ── Tires card ─────────────────────────────────────── */
+.tire-diagram {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tire-axle-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+.tire-axle {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+}
+
+.tire-chassis {
+  flex: 1;
+  height: 6px;
+  background: #444;
+  border-radius: 3px;
+  max-width: 80px;
+}
+
+.tire {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #2c2c2c;
+  color: white;
+  border-radius: 6px;
+  padding: 6px 8px;
+  min-width: 52px;
+  box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+.tire--inner {
+  background: #444;
+  min-width: 46px;
+}
+
+.tire-label {
+  font-size: 0.65rem;
+  opacity: 0.75;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tire-value {
+  font-size: 0.85rem;
+  font-weight: bold;
+  margin-top: 2px;
+}
+
+/* ── Mobile scale-down (≤400px) ─────────────────────── */
+@media (max-width: 400px) {
   .Home {
+    padding: 4px;
+    /* Switch from flex-centering to block so transform math is simpler */
+    display: block;
+  }
+
+  /* Scale the entire content down uniformly.
+     The wrapper is 100% wide. After scale(0.82) it visually becomes 82% wide,
+     leaving 18% gap. Push it right by 9% to center the shrunken content. */
+  .home-wrapper {
+    transform: scale(0.82);
+    transform-origin: top left;
     width: 100%;
-    height: auto;
-    min-height: 100vh;
-    padding: 10px;
-  }
-  
-  .base_svg {
-    position: relative;
-    left: 50%;
-    top: 0px !important;
-    width: 90%;
-    height: auto;
-    padding-bottom: 0;
-    transform: translateX(-50%) scale(0.8);
-    transform-origin: center top;
-    margin: 0 auto;
-  }
-  
-  .base_svg svg {
-    width: 100% !important;
-    height: auto !important;
-    max-width: none !important;
-  }
-  
-  /* Force specific text elements to be black in Home page on mobile */
-  .Home .base_svg svg text {
-    fill: black !important;
-    color: black !important;
+    margin-left: 9%;
   }
 
-  .Home .base_svg svg * {
-    color: black !important;
-  }
-
-  /* Override color scheme for Home page on mobile */
-  .Home .base_svg svg {
-    color-scheme: light !important;
-  }
-
-  /* Exception: Keep battery percentage white on mobile */
-  .Home #battery text {
-    fill: white !important;
-    color: white !important;
-  }
-  
-  /* Battery positioning for mobile */
-  #battery {
-    position: absolute !important;
-    left: 0px !important;
-    top: 75px !important;  /* 65px * 0.6 */
-    transform: scale(0.7) !important;
-  }
-  
-  /* Position gauges in a centered 2x2 grid */
-  #first_gauge {
-    transform: scale(0.55) !important;
-    position: absolute !important;
-    left: 0px !important;
-    top: 130px !important;  /* Reduced from 66px */
-  }
-  
-  #second_gauge {
-    transform: scale(0.55) !important;
-    position: absolute !important;
-    left: 140px !important;
-    top: 130px !important;  /* Reduced from 66px */
-  }
-  
-  #third_gauge {
-    transform: scale(0.55) !important;
-    position: absolute !important;
-    left: 0px !important;
-    top: 260px !important;  /* Reduced from 147px */
-  }
-  
-  #fourth_gauge {
-    transform: scale(0.55) !important;
-    position: absolute !important;
-    left: 140px !important;
-    top: 260px !important;  /* Reduced from 147px */
+  .home-grid {
+    gap: 6px;
   }
 }

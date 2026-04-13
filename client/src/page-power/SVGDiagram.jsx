@@ -57,7 +57,7 @@ function SVGDiagram(props) {
 
     return (
         <div className="base_svg">
-            <SVG src={processedSvg}/>
+            <SVG src={processedSvg} style={{width: '100%', height: 'auto', display: 'block'}}/>
             {children}
         </div>
     )

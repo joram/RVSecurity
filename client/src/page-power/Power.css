@@ -1,91 +1,46 @@
-/* CSS Variables for easy adjustments */
-:root {
-  /* Desktop Layout Variables */
-  --desktop-battery-left: 130px;
-  --desktop-battery-top: 269px;
-  
-  /* Mobile Layout Variables */
-  --mobile-battery-left: 123px;
-  --mobile-battery-top: 331px;
-  --mobile-battery-scale: 1.0;
-  
-  /* Small Mobile Layout Variables */
-  --small-mobile-battery-left: 103px;
-  --small-mobile-battery-top: 228px;
-  --small-mobile-battery-scale: 0.8;
-}
+/* =====================================================
+   Power Page — fluid SVG layout
+   The SVG scales via its viewBox. The battery gauge is
+   positioned as a percentage of the container so it
+   moves with the diagram at every screen size.
+   No breakpoints needed.
+   ===================================================== */
 
 .Power {
   width: 100%;
-  height: 100vh;
-  position: relative;
+  min-height: 100vh;
   overflow: auto;
+  box-sizing: border-box;
+  padding: 10px;
 }
 
-.base_svg{
+/* SVG container: centered, max-width so it doesn't get
+   huge on a desktop, aspect-ratio matches Sophie1.svg
+   viewBox (404 wide × 732 tall → 404/732 ≈ 0.552) */
+.base_svg {
+  position: relative;        /* containing block for % overlays */
+  width: 100%;
+  max-width: 500px;          /* prevents over-stretching on wide screens */
+  margin: 0 auto;
+  aspect-ratio: 404 / 732;  /* matches Sophie1.svg viewBox exactly */
+}
+
+/* SVG fills its container completely */
+.base_svg svg {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+/* Battery gauge: percentage position so it tracks the
+   diagram element at all screen sizes.
+   130/404 = 32.2% left,  269/732 = 36.7% top  */
+.battery {
   position: absolute;
-  left: 50%;
-  top: 60px;
-  height: 100%; 
-  width: 800px; /* Fixed width for centering */
-  padding-bottom: 90%;
-  transform: translateX(-50%);
-}
-
-.battery{
-  position: absolute;
-  left: var(--desktop-battery-left);
-  top: var(--desktop-battery-top);
-}
-
-/* Mobile responsive design */
-@media (max-width: 768px) {
-  .Power {
-    width: 100%;
-    height: auto;
-    min-height: 100vh;
-    padding: 10px;
-  }
-  
-  .base_svg {
-    position: relative;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: auto;
-    padding-bottom: 0;
-    transform: scale(1.2);
-    transform-origin: top left;
-  }
-  
-  .base_svg svg {
-    width: 100% !important;
-    height: auto !important;
-    max-width: none !important;
-  }
-  
-  .battery {
-    position: absolute;
-    left: var(--mobile-battery-left);
-    top: var(--mobile-battery-top);
-    transform: scale(var(--mobile-battery-scale));
-  }
-}
-
-/* Extra small phones */
-@media (max-width: 480px) {
-  .Power {
-    padding: 5px;
-  }
-  
-  .base_svg {
-    transform: scale(1.0);
-    transform-origin: top left;
-  }
-  
-  .battery {
-    transform: scale(var(--small-mobile-battery-scale));
-    left: var(--small-mobile-battery-left);
-    top: var(--small-mobile-battery-top);
-  }
+  left: 32%;
+  top: 37%;
+  /* Scale the widget proportionally to container width.
+     clamp keeps it usable from narrow phones to desktop. */
+  transform: scale(clamp(0.45, 14vw, 0.75));
+  transform-origin: top left;
 }

@@ -1,95 +1,160 @@
 import React, { useEffect, useState } from "react";
 import BatteryGauge from "react-battery-gauge";
-import HomePage from './HomePage.svg';
-import SVGDiagram from "../page-power/SVGDiagram";
 import { fetchFromServer } from '../utils/api';
 import Gauge from '../components/gauge1';
 import './Home.css';
 
-
-
 function Home() {
   let [data, setData] = useState({});
-  
+
   const getData = () => {
     fetchFromServer('/data/home')
       .then(function (myJson) {
-        setData(myJson)
+        setData(myJson);
       })
       .catch(function (error) {
         console.error('Error fetching data:', error);
-        // Set some default data so the page doesn't crash
         setData({
-          var17: 'N/A',
-          var18: 'N/A', 
-          var13: 'N/A',
-          var14: 'N/A',
+          var17: '0', var18: '0', var13: '0', var14: '0',
           battery_percent: 0
         });
       });
-  }
-
+  };
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      getData();
-
-    }, 1000);  // 1000 ms = 1 second
+    const interval = setInterval(getData, 1000);
     return () => clearInterval(interval);
-  }, [])
+  }, []);
 
   return (
-
     <div className="Home">
-      <SVGDiagram
-        filename={HomePage}
-        var1={data.var1}
-        var2={data.var2}
-        var3={data.var3}
-        var4={data.var4}
-        var5={data.var5}
-        var6={data.var6}
-        var7={data.var7}
-        var8={data.var8}
-        var9={data.var9}
-        var10={data.var10}
-        var11={data.var11}
-        var12={data.var12}
-        var13={data.var13}
-        var14={data.var14}
-        var15={data.var15}
-        var16={data.var16}
-        var17={data.var17}
-        var18={data.var18}
-        var19={data.var19}
-        var20={data.var20}
+      <div className="home-wrapper">
 
-      >
-      <div id ="battery">
-        <BatteryGauge
-          value={data.battery_percent}
-          size={150}
-          padding={5}
-          aspectRatio={0.5}
-        />
-      </div>
-    <div id="first_gauge">
-      <Gauge value={data.var17} label={"Fresh"} id="fresh" startColor="#24E9EF" endColor="24E9EF"/>
-    </div>
-    <div id="second_gauge">
-      <Gauge value={data.var18} label={"Propane"} id="propane" startColor="#FF0000" endColor="FF0000"/>
-    </div>
+        {/* ── Header bar ─────────────────────────── */}
+        <div className="home-header">
+          <span className="home-title">RV Status</span>
+          <span className="home-time">{data.var20}</span>
+        </div>
 
-    <div id="third_gauge">
-      <Gauge value={data.var13} label="Gray" id="gray" startColor="#484848" endColor="484848"/>
-    </div>
-    <div id="fourth_gauge">
-      <Gauge value={data.var14} label="Black" id="black" startColor="#000000" endColor="000000"/>
-    </div>
+        {/* ── Main grid ──────────────────────────── */}
+        <div className="home-grid">
 
-      </SVGDiagram>
+          {/* ── Battery card ───────────────────── */}
+          <div className="home-card home-card--battery">
+            <div className="card-title">Battery</div>
+            <div className="battery-body">
+              <div className="battery-stats">
+                <div className="stat-row">
+                  <span className="stat-label">Voltage</span>
+                  <span className="stat-value">{data.var7}</span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-label">Power</span>
+                  <span className="stat-value">{data.var19}</span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-label">Remaining</span>
+                  <span className="stat-value">{data.var15}</span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-label">Status</span>
+                  <span className="stat-value">{data.var16}</span>
+                </div>
+              </div>
+              <div className="battery-widget">
+                <BatteryGauge
+                  value={data.battery_percent || 0}
+                  size={110}
+                  padding={4}
+                  aspectRatio={0.5}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ── Power card ─────────────────────── */}
+          <div className="home-card home-card--power">
+            <div className="card-title">Power</div>
+            <div className="power-row">
+              <div className="power-item power-item--solar">
+                <div className="power-item-header">
+                  <span className="power-icon">☀️</span>
+                  <span className="power-label">Solar</span>
+                </div>
+                <div className="power-value">{data.var5}</div>
+              </div>
+              <div className="power-item power-item--ac">
+                <div className="power-item-header">
+                  <span className="power-icon">🔌</span>
+                  <span className="power-label">AC Coach</span>
+                </div>
+                <div className="power-value">{data.var12}</div>
+              </div>
+              <div className="power-item power-item--dc">
+                <div className="power-item-header">
+                  <span className="power-icon">⚡</span>
+                  <span className="power-label">DC Load</span>
+                </div>
+                <div className="power-value">{data.var8}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Tanks card ─────────────────────── */}
+          <div className="home-card home-card--tanks">
+            <div className="card-title">Tanks</div>
+            <div className="tanks-grid">
+              <Gauge value={data.var17} label="Fresh"   id="fresh"   startColor="#24E9EF" endColor="#24E9EF" radius={50}/>
+              <Gauge value={data.var18} label="Propane" id="propane" startColor="#FF8C00" endColor="#FF8C00" radius={50}/>
+              <Gauge value={data.var13} label="Gray"    id="gray"    startColor="#888888" endColor="#888888" radius={50}/>
+              <Gauge value={data.var14} label="Black"   id="black"   startColor="#333333" endColor="#333333" radius={50}/>
+            </div>
+          </div>
+
+          {/* ── Tires card ─────────────────────── */}
+          <div className="home-card home-card--tires">
+            <div className="card-title">Tire Pressure</div>
+            <div className="tire-diagram">
+              <div className="tire-axle-label">Front</div>
+              <div className="tire-axle">
+                <div className="tire">
+                  <div className="tire-label">LF</div>
+                  <div className="tire-value">{data.var9}</div>
+                </div>
+                <div className="tire-chassis"/>
+                <div className="tire">
+                  <div className="tire-label">RF</div>
+                  <div className="tire-value">{data.var10}</div>
+                </div>
+              </div>
+              <div className="tire-axle-label">Rear</div>
+              <div className="tire-axle">
+                <div className="tire">
+                  <div className="tire-label">LR Out</div>
+                  <div className="tire-value">{data.var1}</div>
+                </div>
+                <div className="tire tire--inner">
+                  <div className="tire-label">LR In</div>
+                  <div className="tire-value">{data.var2}</div>
+                </div>
+                <div className="tire-chassis"/>
+                <div className="tire tire--inner">
+                  <div className="tire-label">RR In</div>
+                  <div className="tire-value">{data.var3}</div>
+                </div>
+                <div className="tire">
+                  <div className="tire-label">RR Out</div>
+                  <div className="tire-value">{data.var4}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div> {/* end home-grid */}
+      </div>   {/* end home-wrapper */}
     </div>
-  )
+  );
 }
 
 export default Home;
+
