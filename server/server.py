@@ -490,8 +490,9 @@ async def wifi_config(data: Annotated[WiFiConfigData, Body()]) -> WiFiConfigResp
     Configure WiFi settings on RP2W device using the RP5toRPZero2WControl.py script
     """
     try:
-        # Path to the WiFi control script - adjust this path as needed
-        script_path = "/home/tblank/code/tblank1024/WifitoHostBridge/RP5toRPZero2WControl.py"
+        # Path to the WiFi control script - relative to server.py for Docker compatibility
+        server_dir = os.path.dirname(os.path.abspath(__file__))
+        script_path = os.path.join(server_dir, "RP5toRPZero2WControl.py")
         
         # Check if script exists
         if not os.path.exists(script_path):
@@ -509,12 +510,20 @@ async def wifi_config(data: Annotated[WiFiConfigData, Body()]) -> WiFiConfigResp
             profile_name = f"RV_{data.ssid.replace(' ', '_')}"
             cmd.append(profile_name)
         
+        # Pass bridge host/port from environment variables (WIFI_BRIDGE_HOST, WIFI_BRIDGE_PORT)
+        # so Docker deployments can configure the target without rebuilding the image.
+        import copy
+        proc_env = copy.copy(os.environ)
+        proc_env.setdefault('WIFI_BRIDGE_HOST', '10.10.0.1')
+        proc_env.setdefault('WIFI_BRIDGE_PORT', '12345')
+
         # Execute the WiFi configuration script
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            timeout=30  # 30 second timeout
+            timeout=30,  # 30 second timeout
+            env=proc_env
         )
         
         # Determine success based on exit code

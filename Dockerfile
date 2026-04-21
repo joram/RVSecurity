@@ -54,6 +54,8 @@ COPY server/kasa_power_strip.py server/.
 COPY server/usb_modem_manager.py server/.
 # Copy USB hub controller module
 COPY usbhub_ascii.py server/.
+# Copy WiFi bridge control script for RP Zero 2W configuration
+COPY server/RP5toRPZero2WControl.py server/.
 #COPY server/mqttclient.py server/.
 #COPY server/dgn_variables.json server/.
 

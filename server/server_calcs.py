@@ -129,6 +129,7 @@ def GenAllFlows(Invert_status_num, BatteryPower, SolarPower, ShorePower, GenPowe
 
 def BatteryCalcs(debug):
     global Batt_Power_Last, Batt_Power_Running_Avg, Batt_Power_Remaining, BATT_POWER_MAX
+    global _Loop_Call_count
 
     #Assumptions: 
     #   BatteryPower is positive when charging
@@ -172,11 +173,12 @@ def BatteryCalcs(debug):
         else:
             Batt_status_str = 'Float Charging'
 
-              
+            
     
     
-    if debug > 0:
-        print(Batt_Voltage, Batt_Current, Batt_Charge, Batt_Power_Running_Avg, Batt_Power_Remaining, '   ' + Batt_Hours_Remaining_str)
+    if debug > -1:
+       if _Loop_Call_count % 10 == 0:
+           print(f"Battery: {Batt_Voltage:.1f}V {Batt_Current:.1f}A {Batt_Charge:.1f}% {Batt_Power_Running_Avg:.1f}Ave_W {Batt_Power_Remaining:.1f}   {Batt_Hours_Remaining_str}")
 
     return(Batt_Power, Batt_Voltage, Batt_Charge, Batt_Hours_Remaining_str, Batt_status_str)
 
@@ -265,13 +267,18 @@ def ATS_Calcs():
 
     return(ShorePower, GenPower)  
 
+_Loop_Call_count = 0
+
 def SolcarCalcs():
+    global _Loop_Call_count
 
     #Solar power calculations
     SolarVBatt = safe_float(AliasData.get("_var40Solar_VBatt", 0), 0) 
     SolarIBatt = safe_float(AliasData.get("_var41Solar_IBatt", 0), 0)
     SolarPower = SolarVBatt * SolarIBatt
-    # print('Solar Battery V,I,P = ', SolarVBatt, SolarIBatt, SolarPower)
+    _Loop_Call_count += 1
+    if _Loop_Call_count % 10 == 0:
+        print(f"Solar: {SolarVBatt:.1f}V {SolarIBatt:.1f}A {SolarPower:.1f}W")
 
     #only provide reasonable values 
     if SolarPower < 0:
@@ -319,7 +326,7 @@ def LoadCalcs(Invert_status_num, Charger_AC_power, DC_Charger_power, ShorePower,
     else:
         #Shouldn't get here
         DC_Load = -1
-        print('ERROR: Invert_status_num = >', Invert_status_num, '<')
+        print(f'{datetime.datetime.now().isoformat()} ERROR: Invert_status_num = >', Invert_status_num, '<')
 
     # "RV_Loads/1": {
     #                     "instance": 1,
