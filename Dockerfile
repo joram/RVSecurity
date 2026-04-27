@@ -50,6 +50,13 @@ COPY server/synology_nas_config.json server/.
 COPY server/synology-password.json server/.
 # Copy Kasa power strip controller (blocking version only)
 COPY server/kasa_power_strip.py server/.
+# Copy Kasa runtime patches for HS300 new_klap=1 firmware bug in python-kasa 0.10.2
+# These are installed into system site-packages AFTER pip install so they survive upgrades.
+# The .pth file auto-loads the patch on every Python startup (including subprocess kasa CLI calls).
+COPY server/kasa_patches.py server/.
+RUN SITE=$(python3 -c "import site; print(site.getsitepackages()[0])") && \
+    cp server/kasa_patches.py $SITE/kasa_hs300_patches.py && \
+    echo "import kasa_hs300_patches; kasa_hs300_patches.apply()" > $SITE/kasa_hs300_patches.pth
 # Copy USB modem manager for cellular modem handling
 COPY server/usb_modem_manager.py server/.
 # Copy USB hub controller module

@@ -13,6 +13,14 @@ import shutil
 import signal
 import atexit
 import logging
+
+# Load .env file if present (for local development credentials)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # loads server/.env when running from server/ directory
+except ImportError:
+    pass  # python-dotenv not installed; rely on environment variables directly
+
 # Initialize alarm-related global variables
 alarm_mqtt_available = False
 
@@ -81,7 +89,31 @@ alarm_thread = None
 alarm_thread_stop_event = None
 
 # Internet Connection State Management
-current_internet_connection = "none"  # Tracks current connection: "none", "cellular", "wifi", "starlink", "wired"
+_INTERNET_STATE_FILE = "/tmp/internet_connection_state.txt"
+
+def _load_internet_state():
+    """Load persisted internet connection state from file."""
+    try:
+        if os.path.exists(_INTERNET_STATE_FILE):
+            with open(_INTERNET_STATE_FILE, "r") as f:
+                state = f.read().strip()
+            valid_states = {"none", "cellular", "cellular-amp", "wifi", "starlink", "wired"}
+            if state in valid_states:
+                print(f"INFO: Loaded persisted internet connection state: {state}")
+                return state
+    except Exception as e:
+        print(f"WARNING: Could not load internet connection state: {e}")
+    return "none"
+
+def _save_internet_state(state):
+    """Persist internet connection state to file."""
+    try:
+        with open(_INTERNET_STATE_FILE, "w") as f:
+            f.write(state)
+    except Exception as e:
+        print(f"WARNING: Could not save internet connection state: {e}")
+
+current_internet_connection = _load_internet_state()  # Tracks current connection: "none", "cellular", "wifi", "starlink", "wired"
 
 # Synology scheduled shutdown management
 scheduled_shutdown_timestamp = None
@@ -624,22 +656,24 @@ def detect_current_internet_connection():
         hub = get_usb_hub_controller()
         if not hub:
             print("WARNING: Could not connect to USB hub for state detection")
-            current_internet_connection = "none"
+            # Don't overwrite current_internet_connection - keep last known value
             return current_internet_connection
         
         # Get the currently active port
         active_port = hub.get_current_active_port()
         
         if active_port == -1:
-            print("WARNING: Could not determine hub state")
-            current_internet_connection = "none"
+            print(f"WARNING: Could not determine hub state, keeping last known: {current_internet_connection}")
+            # Do NOT overwrite current_internet_connection - keep the last known value
         elif active_port == 0:
             print("INFO: No internet connection active (all ports off)")
             current_internet_connection = "none"
+            _save_internet_state(current_internet_connection)
         elif 1 <= active_port <= 4:
             # Map port to connection type
             connection_type = PORT_TO_CONNECTION_TYPE.get(active_port, "none")
             current_internet_connection = connection_type
+            _save_internet_state(current_internet_connection)
             print(f"INFO: Detected active internet connection: {connection_type} (port {active_port})")
         else:
             print(f"WARNING: Invalid active port detected: {active_port}")
@@ -647,7 +681,7 @@ def detect_current_internet_connection():
     
     except Exception as e:
         print(f"ERROR: Failed to detect internet connection state: {e}")
-        current_internet_connection = "none"
+        # Don't overwrite current_internet_connection on error - keep last known value
     
     return current_internet_connection
 
@@ -661,6 +695,7 @@ def update_current_internet_connection(port, action):
         connection_type = PORT_TO_CONNECTION_TYPE.get(port, "none")
         current_internet_connection = connection_type
     
+    _save_internet_state(current_internet_connection)
     print(f"INFO: Current internet connection updated to: {current_internet_connection}")
 
 class InternetPowerData(BaseModel):
@@ -684,6 +719,9 @@ _kasa_cache_time = 0
 _kasa_cache_duration = 300  # Cache for 5 minutes
 _kasa_last_failure_time = 0
 _kasa_failure_cache_duration = 15  # Reduced to 15 seconds for faster recovery when device comes back online
+
+# Global USB hub cache - reuse the same serial connection across calls
+_usb_hub_cache = None
 
 def get_kasa_power_strip():
     """Get Kasa Power Strip Controller instance. Returns None if not available."""
@@ -749,37 +787,51 @@ def clear_kasa_cache():
     print("INFO: Kasa connection cache cleared")
 
 def get_usb_hub_controller():
-    """Get USB Hub Controller instance. Returns None if not available."""
+    """Get USB Hub Controller instance. Returns None if not available.
+    Caches the instance and reuses it; reconnects automatically if the serial port drops."""
+    global _usb_hub_cache
+
+    # Return cached instance if still connected
+    if _usb_hub_cache is not None:
+        if _usb_hub_cache.ser and _usb_hub_cache.ser.is_open:
+            return _usb_hub_cache
+        else:
+            print("INFO: Cached USB hub serial port closed, reconnecting...")
+            if _usb_hub_cache._reconnect():
+                return _usb_hub_cache
+            else:
+                _usb_hub_cache = None  # Give up on cached instance; try fresh below
+
     try:
-        # Import the ASCII USB hub controller from the local directory
         import sys
         import os
-        
+
         # Use the local usbhub_ascii.py module
         local_path = os.path.dirname(os.path.abspath(__file__))
         parent_path = os.path.dirname(local_path)  # Go up one directory to RVSecurity root
         if parent_path not in sys.path:
             sys.path.append(parent_path)
-        
+
         from usbhub_ascii import CoolGearUSBHub
-        
+
         # Try common USB device paths
         possible_ports = ['/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyACM0', '/dev/ttyACM1']
-        
+
         for port in possible_ports:
             if os.path.exists(port):
                 try:
                     hub = CoolGearUSBHub(port)
                     if hub.ser and hub.ser.is_open:
                         print(f"Successfully connected to USB hub on {port}")
+                        _usb_hub_cache = hub
                         return hub
                 except Exception as e:
                     print(f"Failed to connect to USB hub on {port}: {e}")
                     continue
-        
+
         print("No USB hub found on any of the standard ports")
         return None
-        
+
     except ImportError as e:
         print(f"USB hub controller not available: {e}")
         return None

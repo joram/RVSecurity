@@ -1,6 +1,80 @@
 import serial
 import time
 import sys
+import os
+
+
+def _reset_usb_device_for_tty(tty_path):
+    """
+    Reset the USB device backing a tty serial port via sysfs unbind/bind.
+    Uses /sys/bus/usb/drivers/usb/unbind+bind (mounted rw in Docker).
+    This clears EPROTO (-71) errors caused by the FTDI chip entering a bad state.
+
+    Args:
+        tty_path: e.g. '/dev/ttyUSB1'
+    Returns:
+        True if reset was attempted, False if sysfs path not found.
+    """
+    tty_name = os.path.basename(tty_path)  # e.g. 'ttyUSB1'
+    sysfs_tty = f'/sys/class/tty/{tty_name}/device'
+
+    try:
+        if not os.path.exists(sysfs_tty):
+            print(f"[USB RESET] sysfs path not found for {tty_name}, skipping reset")
+            return False
+
+        # Walk up from the resolved tty device path to find the USB device directory.
+        # USB interfaces have ':' in their name (e.g. '3-1.4:1.0').
+        # USB devices do not (e.g. '3-1.4').
+        current = os.path.realpath(sysfs_tty)
+        usb_device_id = None
+
+        for _ in range(6):
+            basename = os.path.basename(current)
+            # USB port path format: N-N.N or N-N (bus-port, no colon)
+            if ':' not in basename and '.' in basename or (basename.startswith(tuple('123456789')) and '-' in basename and ':' not in basename):
+                usb_device_id = basename
+                break
+            current = os.path.dirname(current)
+
+        if not usb_device_id:
+            print(f"[USB RESET] Could not determine USB device ID from sysfs path for {tty_name}")
+            print(f"[USB RESET] Final resolved path was: {current}")
+            return False
+
+        # /sys/bus/usb is mounted :rw in docker-compose — use unbind/bind
+        unbind_path = '/sys/bus/usb/drivers/usb/unbind'
+        bind_path   = '/sys/bus/usb/drivers/usb/bind'
+
+        if not os.path.exists(unbind_path):
+            print(f"[USB RESET] {unbind_path} not available")
+            return False
+
+        print(f"[USB RESET] Resetting USB device '{usb_device_id}' via driver unbind/bind ...")
+
+        with open(unbind_path, 'w') as f:
+            f.write(usb_device_id)
+        time.sleep(1.0)
+
+        with open(bind_path, 'w') as f:
+            f.write(usb_device_id)
+
+        # Wait up to 5 s for the tty device node to reappear
+        for _ in range(20):
+            time.sleep(0.25)
+            if os.path.exists(tty_path):
+                print(f"[USB RESET] {tty_name} re-enumerated successfully")
+                return True
+
+        print(f"[USB RESET] WARNING: {tty_name} did not reappear within 5s after reset")
+        return True  # Reset was issued; caller can decide what to do
+
+    except PermissionError:
+        print(f"[USB RESET] Permission denied — check /sys/bus/usb is mounted :rw in docker-compose")
+        return False
+    except Exception as e:
+        print(f"[USB RESET] Error during USB reset: {e}")
+        return False
 
 # --- CoolGearUSBHub Class Implementation (ASCII-only Version) ---
 
@@ -90,6 +164,35 @@ class CoolGearUSBHub:
             print(f"[ERROR] Error opening serial port {self.port}: {e}")
             print(f"HINT: On Pi, check if you need to use '/dev/ttyACM0' or '/dev/ttyUSB0'.")
             self.ser = None
+        except OSError as e:
+            if e.errno == 5:  # EIO — FTDI chip in bad USB state
+                print(f"[ERROR] FTDI USB error (EIO) on {self.port} — attempting USB device reset...")
+                self.ser = None
+                if _reset_usb_device_for_tty(self.port):
+                    # One retry after reset
+                    try:
+                        self.ser = serial.Serial(
+                            port=self.port,
+                            baudrate=self.baudrate,
+                            timeout=self.READ_TIMEOUT,
+                            write_timeout=self.WRITE_TIMEOUT,
+                            bytesize=8,
+                            parity=serial.PARITY_NONE,
+                            stopbits=serial.STOPBITS_ONE,
+                            xonxoff=False, rtscts=False, dsrdtr=False
+                        )
+                        time.sleep(0.1)
+                        self.ser.setRTS(False)
+                        self.ser.setDTR(False)
+                        self.ser.reset_input_buffer()
+                        self.ser.reset_output_buffer()
+                        print(f"[OK] Reconnected to {self.port} after USB reset.")
+                    except Exception as retry_e:
+                        print(f"[ERROR] Retry after USB reset failed: {retry_e}")
+                        self.ser = None
+            else:
+                print(f"[ERROR] OS error opening {self.port}: {e}")
+                self.ser = None
         except Exception as e:
             print(f"[ERROR] An unexpected critical error occurred during connection: {e}")
             self.ser = None
@@ -162,9 +265,27 @@ class CoolGearUSBHub:
             print("Debug: No response data received")
             return ""
 
+    def _reconnect(self):
+        """Attempt to re-establish a dropped serial connection."""
+        print(f"[INFO] Attempting to reconnect to {self.port}...")
+        try:
+            if self.ser and self.ser.is_open:
+                self.ser.close()
+        except Exception:
+            pass
+        self.ser = None
+        self._connect()
+        if self.ser and self.ser.is_open:
+            print(f"[OK] Reconnected to {self.port}")
+            return True
+        print(f"[ERROR] Reconnect to {self.port} failed")
+        return False
+
     def _execute_command(self, raw_command):
         if not self.ser or not self.ser.is_open:
-            return ""
+            print("[WARNING] Serial port closed, attempting reconnect...")
+            if not self._reconnect():
+                return ""
 
         try:
             # Windows trace shows GET_COMMSTATUS before write
@@ -209,6 +330,12 @@ class CoolGearUSBHub:
             
         except serial.SerialException as e:
             print(f"[ERROR] Error during command execution: {e}")
+            # Mark port as closed so next call triggers reconnect
+            try:
+                if self.ser:
+                    self.ser.close()
+            except Exception:
+                pass
             return ""
 
     def _send_command(self, status_string):
@@ -464,3 +591,227 @@ class CoolGearUSBHub:
         except Exception as e:
             print(f"[ERROR] Failed to get current active port: {e}")
             return -1
+
+
+# ---------------------------------------------------------------------------
+# Mock serial port for cmdline testing without real hardware
+# ---------------------------------------------------------------------------
+
+class _MockSerial:
+    """Minimal pyserial-compatible stub for offline/debug testing."""
+
+    def __init__(self, port, **kwargs):
+        self.port = port
+        self.baudrate = kwargs.get("baudrate", 9600)
+        self.is_open = True
+        self.in_waiting = 0
+        self._responses = {
+            "?Q\r":  b"GCOOLHUB\r",
+            "GP\r":  b"GE0FFFFFF\r",  # default: all ports off
+        }
+        # Mimic current port state so GP reflects last SPpass command
+        self._current_status = "E0FFFFFF"
+        print(f"[MOCK] Opened mock serial port '{port}' at {self.baudrate} baud")
+
+    def write(self, data):
+        text = data.decode("ascii", errors="ignore")
+        print(f"[MOCK] << {data.hex().upper()}  ({text.strip()!r})")
+        # Update simulated port state if it looks like an SPpass command
+        if text.startswith("SPpass") and len(text) >= 18:
+            self._current_status = text[10:18]
+        return len(data)
+
+    def read(self, size):
+        # Return a plausible echo based on last GP state
+        resp = f"G{self._current_status}\r".encode("ascii")
+        self.in_waiting = 0
+        print(f"[MOCK] >> {resp.hex().upper()}  ({resp.strip()!r})")
+        return resp[:size]
+
+    def flush(self):
+        pass
+
+    def reset_input_buffer(self):
+        self.in_waiting = 0
+
+    def reset_output_buffer(self):
+        pass
+
+    def setRTS(self, state):
+        pass
+
+    def setDTR(self, state):
+        pass
+
+    def close(self):
+        self.is_open = False
+        print(f"[MOCK] Closed mock serial port '{self.port}'")
+
+
+class _MockHubContext:
+    """Context manager that patches serial.Serial with _MockSerial."""
+
+    def __enter__(self):
+        import serial as _serial
+        self._real_serial = _serial.Serial
+        _serial.Serial = _MockSerial
+        return self
+
+    def __exit__(self, *_):
+        import serial as _serial
+        _serial.Serial = self._real_serial
+
+
+# ---------------------------------------------------------------------------
+# __main__ – command-line debug harness
+# ---------------------------------------------------------------------------
+
+def _print_help():
+    print("""
+USB Hub ASCII Debug CLI
+=======================
+Usage:
+  python usbhub_ascii.py [--mock] [--port PORT] COMMAND [ARG]
+
+Options:
+  --mock          Use a simulated serial port (no hardware required)
+  --port PORT     Serial device (default: /dev/ttyUSB0)
+
+Commands:
+  status          Query hub for current port status (GP)
+  all_on          Turn all ports ON
+  all_off         Turn all ports OFF
+  reset           Hub reset (all ON)
+  full_reset      Full hub reset cycle
+  port_on  N      Turn port N ON  (1-4)
+  port_off N      Turn port N OFF (1-4)
+  single   N      Set ONLY port N ON  (1-4)
+  active          Get current active port number
+  test            Run built-in test_port_control sequence
+  interactive     Interactive menu loop
+
+Examples:
+  python usbhub_ascii.py --mock status
+  python usbhub_ascii.py --mock port_on 2
+  python usbhub_ascii.py --port /dev/ttyUSB1 active
+  python usbhub_ascii.py --mock interactive
+""")
+
+
+def _interactive(hub):
+    menu = """
+  1) All ON        5) Port ON  N
+  2) All OFF       6) Port OFF N
+  3) Reset         7) Single port N
+  4) Full reset    8) Get active port
+  s) Status query  t) Test sequence
+  q) Quit
+"""
+    while True:
+        print(menu)
+        choice = input("Choice: ").strip().lower()
+        if choice == "q":
+            break
+        elif choice == "1":
+            hub.all_on()
+        elif choice == "2":
+            hub.all_off()
+        elif choice == "3":
+            hub.reset_hub()
+        elif choice == "4":
+            hub.full_hub_reset()
+        elif choice == "5":
+            n = int(input("  Port number (1-4): "))
+            hub.port_on(n)
+        elif choice == "6":
+            n = int(input("  Port number (1-4): "))
+            hub.port_off(n)
+        elif choice == "7":
+            n = int(input("  Port number (1-4): "))
+            hub.set_single_port_on(n)
+        elif choice == "8":
+            print(f"  Active port: {hub.get_current_active_port()}")
+        elif choice == "s":
+            hub._initialize_hub()
+        elif choice == "t":
+            hub.test_port_control()
+        else:
+            print("  Unknown choice")
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="CoolGear USB Hub ASCII debug CLI",
+        add_help=False,
+    )
+    parser.add_argument("--mock",  action="store_true", help="Use mock serial (no hardware)")
+    parser.add_argument("--port",  default="/dev/ttyUSB0", help="Serial port (default /dev/ttyUSB0)")
+    parser.add_argument("--help",  "-h", action="store_true")
+    parser.add_argument("command", nargs="?", default="status")
+    parser.add_argument("arg",     nargs="?", default=None)
+    args = parser.parse_args()
+
+    if args.help:
+        _print_help()
+        sys.exit(0)
+
+    ctx = _MockHubContext() if args.mock else None
+
+    try:
+        if ctx:
+            ctx.__enter__()
+
+        hub = CoolGearUSBHub(args.port)
+
+        cmd = args.command.lower()
+        n   = int(args.arg) if args.arg and args.arg.isdigit() else None
+
+        if cmd == "status":
+            hub._initialize_hub()
+        elif cmd == "all_on":
+            hub.all_on()
+        elif cmd == "all_off":
+            hub.all_off()
+        elif cmd == "reset":
+            hub.reset_hub()
+        elif cmd == "full_reset":
+            hub.full_hub_reset()
+        elif cmd == "port_on":
+            if n is None:
+                print("[ERROR] port_on requires a port number (1-4)")
+                sys.exit(1)
+            hub.port_on(n)
+        elif cmd == "port_off":
+            if n is None:
+                print("[ERROR] port_off requires a port number (1-4)")
+                sys.exit(1)
+            hub.port_off(n)
+        elif cmd == "single":
+            if n is None:
+                print("[ERROR] single requires a port number (1-4)")
+                sys.exit(1)
+            hub.set_single_port_on(n)
+        elif cmd == "active":
+            result = hub.get_current_active_port()
+            print(f"[RESULT] Active port: {result}")
+        elif cmd == "test":
+            hub.test_port_control()
+        elif cmd == "interactive":
+            _interactive(hub)
+        else:
+            print(f"[ERROR] Unknown command: {cmd!r}")
+            _print_help()
+            sys.exit(1)
+
+    finally:
+        if ctx:
+            ctx.__exit__(None, None, None)
+        # Close serial if hub was created
+        try:
+            if hub.ser and hub.ser.is_open:
+                hub.ser.close()
+                print("[INFO] Serial port closed.")
+        except NameError:
+            pass

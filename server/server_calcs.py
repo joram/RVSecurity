@@ -127,6 +127,8 @@ def GenAllFlows(Invert_status_num, BatteryPower, SolarPower, ShorePower, GenPowe
 
     return(BatteryFlow, InvertPwrFlow, ShorePwrFlow, GeneratorPwrFlow, SolarPwrFlow, AltPwrFlow, Invert_status_str)
 
+BATT_DATA_STALE_SECONDS = 120   # Warn if battery MQTT data is older than this
+
 def BatteryCalcs(debug):
     global Batt_Power_Last, Batt_Power_Running_Avg, Batt_Power_Remaining, BATT_POWER_MAX
     global _Loop_Call_count
@@ -141,6 +143,13 @@ def BatteryCalcs(debug):
         Batt_Charge = safe_float(AliasData.get("_var20Batt_charge"))                                     #Battery % charged"
         Batt_Current = safe_int(AliasData.get("_var19Batt_current", 0))                                  #Battery current
         Batt_Voltage = safe_float(AliasData.get("_var18Batt_voltage", 12.5))                                #Battery voltage"  TODO which DC voltage to use???
+
+        # --- Staleness check: warn if battery data has not been updated recently ---
+        batt_timestamp = safe_float(AliasData.get("_var18Batt_voltage_ts", 0))   # adjust key if timestamp stored differently
+        if batt_timestamp > 0:
+            data_age = time.time() - batt_timestamp
+            if data_age > BATT_DATA_STALE_SECONDS:
+                print(f"WARNING: Battery MQTT data is STALE ({data_age:.0f}s old). Calcs may be wrong!")
     except:
         #default values
         Batt_Voltage = 12.5 
@@ -157,6 +166,10 @@ def BatteryCalcs(debug):
     elif Batt_Power < 0:
         #discharging
         Batt_status_str = 'Discharging'
+        # If avg was reset (e.g. just finished charging), seed it with current draw to avoid div/zero
+        if Batt_Power_Running_Avg == 0:
+            Batt_Power_Running_Avg = -Batt_Power   # seed with actual current draw (positive watts)
+            print(f"INFO: Batt_Power_Running_Avg seeded to {Batt_Power_Running_Avg:.1f}W (was zero)")
         Batt_Power_Running_Avg = (Batt_Power_Running_Avg * 15 - Batt_Power) / 16            #Watt-hours discharging  
         Batt_Hours_Remaining_str = 'Est hours remaining: ' + str('%.1f' % (Batt_Power_Remaining  / Batt_Power_Running_Avg))
     else: #Battery charging; Batt_Power > 0
@@ -231,9 +244,13 @@ def InvertCalcs():
         #AC passthru
         if Invert_AC_power < 10:
             Invert_AC_power = Charger_AC_power - 1.2 * DC_Charger_power  #20% is efficiency estimate of charger
+    elif Invert_status_num == 255:
+        # 255 = uninitialized / CAN bus error sentinel — treat as unknown/disabled
+        print(f'{datetime.datetime.now().isoformat()} WARNING: Inverter status 255 (CAN bus error or uninitialized). Defaulting to 0W.')
+        Invert_AC_power = 0
     else:
         #shouldn't get  here
-        print('Error: Invertor status = ', Invert_status_num)
+        print(f'{datetime.datetime.now().isoformat()} WARNING: Unexpected Invertor status = {Invert_status_num}')
     Invert_AC_power = (Invert_AC_power  * 8 + Invert_AC_power_prev * 8)/16
     Invert_AC_power_prev = Invert_AC_power
 

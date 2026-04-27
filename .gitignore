@@ -15,6 +15,12 @@ synology_nas_config.json
 synology_nas_config.*.json
 **/synology_nas_config.json
 
+# Local environment variables (contains credentials - never commit)
+.env
+.env.local
+**/.env
+**/synology-password.json
+
 
 
 # C extensions

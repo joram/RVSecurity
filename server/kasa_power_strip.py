@@ -10,6 +10,13 @@ import sys
 import time
 from typing import Dict, List, Optional, Union, Tuple
 
+# Load .env file if present (for local development credentials)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 
 class KasaPowerStripError(Exception):
     """Exception raised for Kasa power strip communication errors."""
@@ -29,18 +36,24 @@ class KasaPowerStrip:
        - No asyncio dependencies
     """
     
-    def __init__(self, host: Optional[str] = None, timeout: int = 8):
+    def __init__(self, host: Optional[str] = None, timeout: int = 8,
+                 username: Optional[str] = None, password: Optional[str] = None):
         """
         Initialize the Kasa Power Strip controller.
         
         Args:
             host: IP address of the power strip (if None, will use environment variable)
             timeout: Command timeout in seconds (default: 8, balanced for device discovery)
+            username: Kasa cloud account email (if None, will use KASA_USERNAME env var)
+            password: Kasa cloud account password (if None, will use KASA_PASSWORD env var)
         """
         # Support environment variables for Docker configuration
         self.host = host or os.getenv('KASA_IP')
         self.timeout = timeout
         self.device_info = None
+        # Credentials for newer KLAP-protocol devices
+        self.username = username or os.getenv('KASA_USERNAME')
+        self.password = password or os.getenv('KASA_PASSWORD')
         
         if not self.host:
             raise KasaPowerStripError(
@@ -73,6 +86,19 @@ class KasaPowerStrip:
                     kasa_cmd = 'kasa'  # fallback to PATH lookup
             
             cmd = [kasa_cmd, '--host', self.host]
+            # Add credentials if provided (required for newer KLAP-protocol devices)
+            if self.username and self.password:
+                cmd.extend(['--username', self.username, '--password', self.password])
+            # HS300 firmware with new_klap=1 requires:
+            #   - KlapTransportV2 (patched in device_factory.py via login_version=2)
+            #   - IotStrip class instead of IotPlug (re-classified in device_factory.py)
+            # Using --device-family + --encrypt-type forces Device.connect() path in CLI
+            # which goes through get_device_from_connected_protocol where our patches apply.
+            cmd.extend([
+                '--device-family', 'IOT.SMARTPLUGSWITCH',
+                '--encrypt-type', 'klap',
+                '--login-version', '2',
+            ])
             if use_json:
                 cmd.append('--json')
             cmd.extend(command_args)
@@ -569,6 +595,12 @@ Examples:
         parser.add_argument('--host', '--ip', 
                            help='IP address of the Kasa power strip (default: uses KASA_IP environment variable)')
         
+        # Credential arguments (required for newer KLAP-protocol devices)
+        parser.add_argument('--username', '-u',
+                           help='Kasa cloud account email (default: uses KASA_USERNAME environment variable)')
+        parser.add_argument('--password', '-p',
+                           help='Kasa cloud account password (default: uses KASA_PASSWORD environment variable)')
+        
         # Command group - mutually exclusive
         command_group = parser.add_mutually_exclusive_group(required=True)
         command_group.add_argument('--status', action='store_true',
@@ -595,8 +627,12 @@ Examples:
         if not host:
             parser.error("Host IP address required. Use --host or set KASA_IP environment variable")
         
+        # Determine credentials
+        username = args.username or os.getenv('KASA_USERNAME')
+        password = args.password or os.getenv('KASA_PASSWORD')
+        
         try:
-            kasa = KasaPowerStrip(host)
+            kasa = KasaPowerStrip(host, username=username, password=password)
             
             if args.status:
                 # Connect quietly for status command
