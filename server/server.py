@@ -22,7 +22,8 @@ except ImportError:
     pass  # python-dotenv not installed; rely on environment variables directly
 
 # Initialize alarm-related global variables
-alarm_mqtt_available = False
+# MQTT is always available as a fallback (broker is always running)
+alarm_mqtt_available = True
 
 # Global debug setting
 DEBUG_MODE = os.getenv('SERVER_DEBUG', '').lower() in ('true', '1', 'yes')  # Enable with SERVER_DEBUG=true
@@ -1435,82 +1436,44 @@ def get_kasa_debug_status() -> dict:
                 }
             }
         
-        # Test connection first before trying to get individual outlets
+        outlet_names = {
+            1: "Kasa Outlet 1 (Cellular Amp)",
+            2: "Kasa Outlet 2 (TV)",
+            3: "Kasa Outlet 3 (Soundbar)",
+            4: "Kasa Outlet 4 (Synology)",
+            5: "Kasa Outlet 5",
+            6: "Kasa Outlet 6 (Starlink)"
+        }
+
+        # Single subprocess call to get all outlets + power at once
         try:
-            # Try a simple connection test
-            if not kasa_strip.test_connectivity():
-                raise KasaPowerStripError("Connection test failed")
-        except Exception as e:
-            # Connection failed, return mock data with error info
+            all_outlets_data, _ = kasa_strip.get_all_outlet_status_with_power()
+        except KasaPowerStripError as e:
             error_msg = str(e)
-            # Remove technical details for user-friendly message
-            if "Kasa command failed:" in error_msg:
-                error_msg = "Device connection failed"
-            elif "Kasa communication error" in error_msg:
-                error_msg = "Device temporarily unavailable"
-            
+            _kasa_last_failure_time = time.time()
             return {
-                "success": True,
-                "message": f"Kasa device unavailable ({error_msg}) - showing mock data",
+                "success": False,
+                "message": "Can't connect to Kasa device",
                 "outlets": {
-                    1: {"enabled": False, "power_watts": 0, "name": "Kasa Outlet 1 (Cellular Amp) [ERROR]", "mock": True, "status": "error"},
-                    2: {"enabled": True, "power_watts": 0.1, "name": "Kasa Outlet 2 (TV) [ERROR]", "mock": True, "status": "error"},
-                    3: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 3 (Soundbar) [ERROR]", "mock": True, "status": "error"},
-                    4: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 4 (Synology) [ERROR]", "mock": True, "status": "error"},
-                    5: {"enabled": True, "power_watts": 0.0, "name": "Kasa Outlet 5 [ERROR]", "mock": True, "status": "error"},
-                    6: {"enabled": False, "power_watts": 0.0, "name": "Kasa Outlet 6 (Starlink) [ERROR]", "mock": True, "status": "error"}
-                }
-            }
-        
-        # Connection successful, get real outlet data
-        outlets = {}
-        for outlet_id in range(1, 7):  # Kasa outlets 1-6
-            try:
-                # Get outlet status (this gives us the on/off state)
-                status_data = kasa_strip.get_outlet_status(outlet_id - 1)  # Convert to 0-based
-                
-                if 'error' in status_data:
-                    outlets[outlet_id] = {
+                    i: {
                         "enabled": False,
                         "power_watts": 0,
-                        "name": f"Kasa Outlet {outlet_id} [COMM ERROR]",
-                        "error": "Communication error",
-                        "status": "comm_error"
-                    }
-                else:
-                    is_on = status_data.get('is_on', False)
-                    
-                    # Also get power consumption
-                    try:
-                        power_data = kasa_strip.get_power_consumption(outlet_id - 1)
-                        power_watts = power_data.get('power_w', 0) if 'error' not in power_data else 0
-                    except:
-                        power_watts = 0
-                    
-                    # Get outlet name/alias if available
-                    outlet_names = {
-                        1: "Kasa Outlet 1 (Cellular Amp)",
-                        2: "Kasa Outlet 2 (TV)", 
-                        3: "Kasa Outlet 3 (Soundbar)",
-                        4: "Kasa Outlet 4 (Synology)",
-                        5: "Kasa Outlet 5",
-                        6: "Kasa Outlet 6 (Starlink)"
-                    }
-                    
-                    outlets[outlet_id] = {
-                        "enabled": is_on,
-                        "power_watts": round(power_watts, 1),
-                        "name": outlet_names.get(outlet_id, f"Kasa Outlet {outlet_id}"),
-                        "status": "online"
-                    }
-            except Exception as e:
-                outlets[outlet_id] = {
-                    "enabled": False,
-                    "power_watts": 0,
-                    "name": f"Kasa Outlet {outlet_id} [ERROR]",
-                    "error": "Individual outlet error",
-                    "status": "error"
+                        "name": f"{outlet_names.get(i, f'Kasa Outlet {i}')} [NO CONNECT]",
+                        "error": "Can't connect to Kasa device",
+                        "status": "no_connect"
+                    } for i in range(1, 7)
                 }
+            }
+
+        outlets = {}
+        for outlet_data in all_outlets_data:
+            outlet_id = outlet_data['outlet_id'] + 1  # Convert 0-based to 1-based
+            outlets[outlet_id] = {
+                "enabled": outlet_data.get('is_on', False),
+                "power_watts": round(outlet_data.get('power_w', 0), 1),
+                "name": outlet_names.get(outlet_id, f"Kasa Outlet {outlet_id}"),
+                "status": "online"
+            }
         
         return {
             "success": True,
@@ -1793,7 +1756,7 @@ if __name__ == "__main__":
     print(constants["IPADDR"], constants["PORT"])
     
     try:
-        uvicorn.run(app, host="0.0.0.0", port=int(constants["PORT"]), log_level="warning")
+        uvicorn.run(app, host="0.0.0.0", port=int(constants["PORT"]), log_level="warning", workers=1)
     except KeyboardInterrupt:
         print("Server interrupted by user")
     finally:

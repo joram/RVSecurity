@@ -50,7 +50,7 @@ import './PlexSvr.css';
 import { getServerUrl } from '../utils/api';
 
 const PlexSvr = () => {
-  const [selectedOption, setSelectedOption] = useState('off');
+  const [selectedOption, setSelectedOption] = useState('standby');
   const [message, setMessage] = useState('');
   const [scheduledTime, setScheduledTime] = useState(null);
   const [timeRemaining, setTimeRemaining] = useState(0);
@@ -141,7 +141,7 @@ const PlexSvr = () => {
       if (result.success) {
         // Use shorter, cleaner messages for user display
         if (action === 'power-off') {
-          setMessage('Server off');
+          setMessage('Ready');
         } else if (action === 'power-on') {
           setMessage('Server on');
         } else {
@@ -293,9 +293,9 @@ const PlexSvr = () => {
         
         if (serverIsOn) {
           // Don't set the radio button here - let getScheduledTime determine if it's timed or manual
-          setMessage("✅ Server running");
+          setMessage("Ready");
         } else {
-          setSelectedOption('off');
+          setSelectedOption('standby');
           // Check if ethernet is active by parsing the message text
           let ethernetActive = false;
           if (result.message) {
@@ -307,16 +307,16 @@ const PlexSvr = () => {
           }
           
           if (ethernetActive) {
-            setMessage("⏹️ Server off - ready to start");
+            setMessage("Ready");
           } else {
-            setMessage("❌ Synology Plex server is offline and must be restarted manually. It's behind TV set.");
+            setMessage("Server off — must manually restart server (behind TV)");
             // Turn on entertainment system outlets when ethernet is unavailable (manual restart needed)
             controlKasaEntertainmentSystem('on');
           }
         }
       } else {
         setMessage(`❌ Unable to determine server status: ${result.message || 'Unknown error'}`);
-        setSelectedOption('off');
+        setSelectedOption('standby');
       }
       
       // Also get scheduled shutdown time and update radio selection
@@ -403,7 +403,7 @@ const PlexSvr = () => {
       if (remaining <= 0) {
         // Timer expired, turn off server
         controlSynology('power-off');
-        setSelectedOption('off');
+        setSelectedOption('standby');
         setScheduledTime(null);
         setMessage('Synology Plex Server off');
         clearInterval(timerRef.current);
@@ -421,8 +421,8 @@ const PlexSvr = () => {
       timerRef.current = null;
     }
 
-    if (value === 'off') {
-      // Turn off immediately and cancel any scheduled shutdown
+    if (value === 'standby') {
+      // Graceful shutdown — keeps network board powered, WoL-ready
       await cancelScheduledShutdown();
       await controlSynology('power-off');
       setTimeRemaining(0);
@@ -552,10 +552,10 @@ const PlexSvr = () => {
           <Form>
             <Form.Field>
               <Radio
-                label='Off'
+                label='Standby (ready to start)'
                 name='plexServerOption'
-                value='off'
-                checked={selectedOption === 'off'}
+                value='standby'
+                checked={selectedOption === 'standby'}
                 onChange={handleChange}
                 disabled={isLoading}
               />
