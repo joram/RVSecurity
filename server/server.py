@@ -56,6 +56,52 @@ from fastapi.middleware.cors import CORSMiddleware
 import random
 from server_calcs import *
 from server_calcs import constants
+import paho.mqtt.client as _paho_mqtt
+
+# ---------------------------------------------------------------------------
+# Tire TPMS data — populated by background MQTT subscriber
+# Keys match TireLinc position names (FL, FR, RL_out, RL_in, RR_out, RR_in)
+# ---------------------------------------------------------------------------
+_tire_data: dict = {}
+
+def _start_tire_mqtt() -> None:
+    """Subscribe to RVC/TIRE_STATUS/# in a daemon thread and cache latest values."""
+    def _on_message(client, userdata, msg):
+        try:
+            payload = json.loads(msg.payload.decode('utf-8'))
+            name = payload.get('name')
+            if name:
+                _tire_data[name] = {
+                    'psi':    payload.get('pressure_psi'),
+                    'temp_f': payload.get('temp_f'),
+                }
+        except Exception:
+            pass
+
+    def _run():
+        c = _paho_mqtt.Client()
+        c.on_message = _on_message
+        c.on_connect = lambda client, ud, flags, rc: client.subscribe('RVC/TIRE_STATUS/#', 0)
+        try:
+            c.connect('localhost', 1883, 60)
+            c.loop_forever()
+        except Exception as e:
+            print(f'Tire MQTT subscriber failed: {e}')
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+
+def _tire_psi(name: str) -> str:
+    d = _tire_data.get(name)
+    if d and d.get('psi') is not None:
+        return f"{d['psi']} psi"
+    return '-- psi'
+
+def _tire_temp(name: str) -> str:
+    d = _tire_data.get(name)
+    if d and d.get('temp_f') is not None:
+        return f"{d['temp_f']}°F"
+    return ''
 
 
 
@@ -1186,6 +1232,13 @@ class DataResponse(BaseModel):
     var19: str
     var20: str
     battery_percent: float
+    # Tire temperatures (populated when tirelinc container is running)
+    tire_lf_temp: str = ''
+    tire_rf_temp: str = ''
+    tire_lr_out_temp: str = ''
+    tire_lr_in_temp: str = ''
+    tire_rr_in_temp: str = ''
+    tire_rr_out_temp: str = ''
 
 
 # This is the POWER page function that is called by the front end client
@@ -1249,40 +1302,59 @@ def data_home()-> DataResponse:  # Removed async
     (RedMsg, YellowMsg, Time_Str) = HouseKeeping()
 
     # Tank level calculations with error handling for missing data
+    # Note: rvglue initializes AliasData values to 3.14 as a placeholder;
+    # if MQTT data hasn't arrived yet level==resolution==3.14, giving a false 100%.
+    _UNINIT = 3.14
     try:
-        Tank_Fresh = round(rvglue.rvglue.AliasData["_var29Tank_Level"]/rvglue.rvglue.AliasData["_var30Tank_Resolution"] * 100 )  
-    except (KeyError, ZeroDivisionError):
-        Tank_Fresh = 50  # Default value when no data available
+        level = rvglue.rvglue.AliasData["_var29Tank_Level"]
+        res   = rvglue.rvglue.AliasData["_var30Tank_Resolution"]
+        if level == _UNINIT or res == _UNINIT:
+            raise ValueError("uninitialized")
+        Tank_Fresh = round(level / res * 100)
+    except (KeyError, ZeroDivisionError, ValueError):
+        Tank_Fresh = 97  # Default value when no data available
         
     try:
-        Tank_Black = round(rvglue.rvglue.AliasData["_var32Tank_Level"]/rvglue.rvglue.AliasData["_var33Tank_Resolution"] * 100)
-    except (KeyError, ZeroDivisionError):
-        Tank_Black = 25  # Default value when no data available
+        level = rvglue.rvglue.AliasData["_var32Tank_Level"]
+        res   = rvglue.rvglue.AliasData["_var33Tank_Resolution"]
+        if level == _UNINIT or res == _UNINIT:
+            raise ValueError("uninitialized")
+        Tank_Black = round(level / res * 100)
+    except (KeyError, ZeroDivisionError, ValueError):
+        Tank_Black = 96  # Default value when no data available
         
     try:
-        Tank_Gray = round(rvglue.rvglue.AliasData["_var35Tank_Level"]/rvglue.rvglue.AliasData["_var36Tank_Resolution"] * 100)   
-    except (KeyError, ZeroDivisionError):
-        Tank_Gray = 30  # Default value when no data available
+        level = rvglue.rvglue.AliasData["_var35Tank_Level"]
+        res   = rvglue.rvglue.AliasData["_var36Tank_Resolution"]
+        if level == _UNINIT or res == _UNINIT:
+            raise ValueError("uninitialized")
+        Tank_Gray = round(level / res * 100)
+    except (KeyError, ZeroDivisionError, ValueError):
+        Tank_Gray = 99  # Default value when no data available
         
     try:
-        Tank_Propane = round(rvglue.rvglue.AliasData["_var38Tank_Level"]/rvglue.rvglue.AliasData["_var39Tank_Resolution"] * 100)  
-    except (KeyError, ZeroDivisionError):
-        Tank_Propane = 75  # Default value when no data available  
+        level = rvglue.rvglue.AliasData["_var38Tank_Level"]
+        res   = rvglue.rvglue.AliasData["_var39Tank_Resolution"]
+        if level == _UNINIT or res == _UNINIT:
+            raise ValueError("uninitialized")
+        Tank_Propane = round(level / res * 100)
+    except (KeyError, ZeroDivisionError, ValueError):
+        Tank_Propane = 98  # Default value when no data available  
 
     if debug > 0:
         print('invert power= ', round(Invert_AC_power), round(Invert_DC_power*.8))
 
     return DataResponse(
-        var1 = 'Outside 60? psi',   # LR outside
-        var2 = 'Inside 60? psi',    # LR inside
-        var3 = 'Inside 60? psi',   # RR inside
-        var4 = 'Outside 60? psi',    # RR outside
+        var1 = _tire_psi('RL_out'),   # LR outside
+        var2 = _tire_psi('RL_in'),    # LR inside
+        var3 = _tire_psi('RR_in'),    # RR inside
+        var4 = _tire_psi('RR_out'),   # RR outside
         var5 = str(SolarPower) + ' Watts',
         var6 = 'not used',                                            
         var7 = str('%.1f' % Batt_Voltage) + " Volts DC",
         var8 = str('%.0f' % DC_Load) + ' Watts',
-        var9 = '60? psi',    # LF
-        var10= '60? psi',    # RF
+        var9 = _tire_psi('FL'),       # LF
+        var10= _tire_psi('FR'),       # RF
         var11= 'not used',  
         var12= str('%.0f' % max(Invert_AC_power, .8 * (Invert_DC_power)) + " Watts"),      #note: .8 is efficiency estimate of inverter
         var13= str(Tank_Gray),   # Send as string, client will convert to number
@@ -1294,7 +1366,12 @@ def data_home()-> DataResponse:  # Removed async
         var19= str('%.0f' % Batt_Power) + " Watts",
         battery_percent= Batt_Charge,
         var20= Time_Str,
-        
+        tire_lf_temp=      _tire_temp('FL'),
+        tire_rf_temp=      _tire_temp('FR'),
+        tire_lr_out_temp=  _tire_temp('RL_out'),
+        tire_lr_in_temp=   _tire_temp('RL_in'),
+        tire_rr_in_temp=   _tire_temp('RR_in'),
+        tire_rr_out_temp=  _tire_temp('RR_out'),
     )
 
 # Debug API endpoints
@@ -1711,6 +1788,196 @@ async def debug_synology_control(action: str):
 async def status() -> dict:
     return {"hello": "world and more"}
 
+# ---------------------------------------------------------------------------
+# System control endpoints
+# ---------------------------------------------------------------------------
+
+# Path to docker-compose file on the HOST (mounted into container at same path)
+_COMPOSE_FILE = os.environ.get(
+    'COMPOSE_FILE',
+    '/home/tblank/code/tblank1024/rv/docker/docker-compose.yml'
+)
+
+def _nsenter_cmd(host_cmd: list) -> list:
+    """Wrap a command in nsenter so it executes in the host's namespaces."""
+    return ['nsenter', '-t', '1', '-m', '-u', '-i', '-n', '--'] + host_cmd
+
+@app.post("/api/system/reboot")
+def system_reboot() -> dict:
+    """Reboot the host Raspberry Pi.
+
+    Tries three methods in order:
+    1. libc reboot() syscall — requires pid: host + privileged: true
+    2. nsenter into host namespaces to run systemctl reboot
+    3. /proc/sysrq-trigger — works from any privileged container
+    """
+    errors = []
+
+    # Method 1: libc reboot() syscall directly
+    # Only works when pid: host is set so we are in the initial PID namespace.
+    try:
+        import ctypes, ctypes.util, struct
+        libc = ctypes.CDLL(ctypes.util.find_library('c'), use_errno=True)
+        m1 = struct.unpack('i', struct.pack('I', 0xfee1dead))[0]
+        ret = libc.reboot(ctypes.c_int(m1), ctypes.c_int(0x28121969), ctypes.c_int(0x01234567), None)
+        if ret == 0:
+            return {"success": True, "message": "Reboot via libc syscall initiated"}
+        errno_val = ctypes.get_errno()
+        errors.append(f"libc.reboot returned {ret}, errno={errno_val} ({os.strerror(errno_val)})")
+    except Exception as e:
+        errors.append(f"libc.reboot exception: {e}")
+
+    # Method 2: nsenter — requires pid: host so PID 1 == host systemd
+    try:
+        result = subprocess.run(
+            ['nsenter', '-t', '1', '-m', '-u', '-i', '-n', '--', 'systemctl', 'reboot'],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            return {"success": True, "message": "Reboot via nsenter/systemctl initiated"}
+        errors.append(f"nsenter/systemctl rc={result.returncode} stderr={result.stderr.strip()}")
+    except Exception as e:
+        errors.append(f"nsenter exception: {e}")
+
+    # Method 3: SysRq trigger — works from any privileged container, bypasses PID namespace
+    try:
+        # Enable sysrq in case it is disabled
+        with open('/proc/sys/kernel/sysrq', 'w') as f:
+            f.write('1')
+        subprocess.run(['sync'], check=False)
+        import time; time.sleep(0.3)
+        with open('/proc/sysrq-trigger', 'w') as f:
+            f.write('b')
+        return {"success": True, "message": "Reboot via sysrq initiated"}
+    except Exception as e:
+        errors.append(f"sysrq exception: {e}")
+
+    return {"success": False, "message": "All reboot methods failed", "errors": errors}
+
+@app.post("/api/system/restart-containers")
+def system_restart_containers() -> dict:
+    """Restart all containers in the compose project via the Docker socket."""
+    try:
+        import docker as docker_sdk
+
+        def _do_restart():
+            import time
+            import yaml
+            time.sleep(0.5)  # allow response to be returned before self-restart
+            client = docker_sdk.DockerClient(base_url='unix://var/run/docker.sock')
+            project = os.path.basename(os.path.dirname(_COMPOSE_FILE))
+
+            # Build set of all container_names defined in the compose file.
+            # Some containers (e.g. battery/bat2mqtt) are started outside
+            # `docker compose up` and therefore carry no compose labels.
+            compose_names = set()
+            try:
+                with open(_COMPOSE_FILE) as f:
+                    compose_data = yaml.safe_load(f)
+                for svc in (compose_data or {}).get('services', {}).values():
+                    cn = svc.get('container_name')
+                    if cn:
+                        compose_names.add(cn)
+            except Exception:
+                pass
+
+            # Containers found via compose label
+            labeled = client.containers.list(
+                all=True,
+                filters={'label': f'com.docker.compose.project={project}'}
+            )
+            labeled_names = {c.name for c in labeled}
+
+            # Containers named in compose file but not carrying compose labels
+            unlabeled = []
+            for name in compose_names - labeled_names:
+                try:
+                    unlabeled.append(client.containers.get(name))
+                except docker_sdk.errors.NotFound:
+                    pass
+
+            all_containers = labeled + unlabeled
+
+            # Restart the container running this code (webserver) last —
+            # restarting it kills this thread mid-loop.
+            def _is_self(c):
+                labels = c.labels or {}
+                return labels.get('com.docker.compose.service') == 'webserver'
+
+            others = [c for c in all_containers if not _is_self(c)]
+            self_container = [c for c in all_containers if _is_self(c)]
+            for c in others + self_container:
+                try:
+                    if c.status == 'running':
+                        c.restart(timeout=10)
+                    else:
+                        c.start()
+                except Exception:
+                    pass
+
+        t = threading.Thread(target=_do_restart, daemon=True)
+        t.start()
+        return {"success": True, "message": "Containers restarting"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+# ---------------------------------------------------------------------------
+# Tire service control endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/tire/service")
+def tire_service_status() -> dict:
+    """Check whether the tirelinc Docker container is running."""
+    try:
+        import docker as docker_sdk
+        client = docker_sdk.DockerClient(base_url='unix://var/run/docker.sock')
+        try:
+            container = client.containers.get('tirelinc')
+            running = container.status == 'running'
+            return {"success": True, "running": running}
+        except docker_sdk.errors.NotFound:
+            return {"success": True, "running": False}
+        finally:
+            client.close()
+    except Exception as e:
+        return {"success": False, "running": False, "message": str(e)}
+
+@app.post("/api/tire/service")
+def tire_service_control(data: Annotated[dict, Body()]) -> dict:
+    """Start or stop the tirelinc Docker container."""
+    action = data.get('action', '').lower()
+    if action not in ('start', 'stop'):
+        return {"success": False, "message": "action must be 'start' or 'stop'"}
+    try:
+        import docker as docker_sdk
+        client = docker_sdk.DockerClient(base_url='unix://var/run/docker.sock')
+        try:
+            container = client.containers.get('tirelinc')
+            if action == 'start':
+                container.start()
+            else:
+                container.stop()
+            return {"success": True, "running": action == 'start'}
+        except docker_sdk.errors.NotFound:
+            return {"success": False, "message": "tirelinc container not found"}
+        finally:
+            client.close()
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@app.post("/api/tire/silence")
+def tire_silence_alarm() -> dict:
+    """Publish an MQTT message to silence the tire alarm."""
+    try:
+        import paho.mqtt.client as mqtt
+        c = mqtt.Client()
+        c.connect('localhost', 1883, 60)
+        c.publish('RVC/TIRE_ALARM/silence', '1')
+        c.disconnect()
+        return {"success": True, "message": "Silence command sent"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
 import os
 if os.path.exists("build") and os.path.isdir("build"):
     static_files = StaticFiles(directory="build")
@@ -1738,6 +2005,10 @@ if __name__ == "__main__":
     t1 = threading.Thread(target=client.run_mqtt_infinite)
     #t1 = threading.Thread(target=MQTTClient.MQTTClient().printhello)
     t1.start()
+
+    # Start tire TPMS MQTT subscriber
+    _start_tire_mqtt()
+    print("Tire TPMS MQTT subscriber started")
 
     # Initialize internet connection state from USB hub
     print("Detecting current internet connection state...")

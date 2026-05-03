@@ -1,33 +1,133 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import BatteryGauge from "react-battery-gauge";
 import { fetchFromServer } from '../utils/api';
 import Gauge from '../components/gauge1';
 import './Home.css';
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Extract the numeric value from strings like "54 psi", "-72°F", "--". */
+function parseTireNum(str) {
+  if (!str) return null;
+  const m = String(str).match(/-?\d+(\.\d+)?/);
+  return m ? parseFloat(m[0]) : null;
+}
+
+/** Render a single tire box with alert-coloring for negative values. */
+function TireCell({ label, psiStr, tempStr, className }) {
+  const psi  = parseTireNum(psiStr);
+  const temp = parseTireNum(tempStr);
+  const alert = (psi !== null && psi < 0) || (temp !== null && temp < 0);
+  const style = alert ? { color: '#ff4444' } : {};
+  const dispPsi  = psi  !== null ? `${Math.abs(psi)} psi` : (psiStr  || '--');
+  const dispTemp = temp !== null ? `${Math.abs(temp)}°F`  : (tempStr || '');
+
+  return (
+    <div className={`tire${className ? ' ' + className : ''}`}>
+      <div className="tire-label">{label}</div>
+      <div className="tire-reading" style={style}>{dispPsi}</div>
+      <div className="tire-reading" style={style}>{dispTemp}</div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Home
+// ---------------------------------------------------------------------------
+
 function Home() {
-  let [data, setData] = useState({});
+  const [data, setData] = useState({});
+  const [tireRunning, setTireRunning] = useState(null); // null = unknown
+  const [restarting, setRestarting] = useState(false);
+  const [rebooting, setRebooting] = useState(false);
+  const [confirmReboot, setConfirmReboot] = useState(false);
+  const serverWentDown = useRef(false);
+  const tireStatusLockedUntil = useRef(0); // epoch ms — ignore poll results until this time
 
   const getData = () => {
     fetchFromServer('/data/home')
-      .then(function (myJson) {
+      .then(myJson => {
         setData(myJson);
+        if (serverWentDown.current) {
+          serverWentDown.current = false;
+          setRestarting(false);
+          setRebooting(false);
+        }
       })
-      .catch(function (error) {
+      .catch(error => {
         console.error('Error fetching data:', error);
-        setData({
-          var17: '0', var18: '0', var13: '0', var14: '0',
-          battery_percent: 0
-        });
+        serverWentDown.current = true;
+        setData({ var17: '0', var18: '0', var13: '0', var14: '0', battery_percent: 0 });
       });
   };
 
+  const fetchTireServiceStatus = () => {
+    fetchFromServer('/api/tire/service')
+      .then(r => {
+        if (Date.now() >= tireStatusLockedUntil.current) {
+          setTireRunning(r.running);
+        }
+      })
+      .catch(() => {});
+  };
+
   useEffect(() => {
-    const interval = setInterval(getData, 1000);
-    return () => clearInterval(interval);
+    const dataInterval = setInterval(getData, 1000);
+    fetchTireServiceStatus();
+    const svcInterval  = setInterval(fetchTireServiceStatus, 10000);
+    return () => { clearInterval(dataInterval); clearInterval(svcInterval); };
   }, []);
+
+  const handleReboot = () => setConfirmReboot(true);
+
+  const doReboot = () => {
+    setConfirmReboot(false);
+    serverWentDown.current = false;
+    setRebooting(true);
+    fetchFromServer('/api/system/reboot', { method: 'POST' })
+      .catch(err => { console.error('Reboot error:', err); setRebooting(false); });
+  };
+
+  const handleRestart = () => {
+    serverWentDown.current = false;
+    setRestarting(true);
+    fetchFromServer('/api/system/restart-containers', { method: 'POST' })
+      .catch(err => { console.error('Restart error:', err); setRestarting(false); });
+  };
+
+  const handleTireService = () => {
+    const action = tireRunning ? 'stop' : 'start';
+    const optimistic = action === 'start';
+    tireStatusLockedUntil.current = Date.now() + 12000; // block polls for 12 s
+    setTireRunning(optimistic); // update immediately for instant visual feedback
+    fetchFromServer('/api/tire/service', {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+    })
+      .then(r => { if (!r.success) { tireStatusLockedUntil.current = 0; setTireRunning(!optimistic); } })
+      .catch(err => { console.error('Tire service error:', err); tireStatusLockedUntil.current = 0; setTireRunning(!optimistic); });
+  };
+
+  const handleSilenceAlarm = () => {
+    fetchFromServer('/api/tire/silence', { method: 'POST' })
+      .catch(err => console.error('Silence error:', err));
+  };
 
   return (
     <div className="Home">
+      {confirmReboot && (
+        <div className="confirm-overlay">
+          <div className="confirm-dialog">
+            <p className="confirm-msg">Confirm reboot?</p>
+            <div className="confirm-buttons">
+              <button className="confirm-btn confirm-btn--yes" onClick={doReboot}>Yes</button>
+              <button className="confirm-btn confirm-btn--no" onClick={() => setConfirmReboot(false)}>No</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="home-wrapper">
 
         {/* ── Header bar ─────────────────────────── */}
@@ -113,40 +213,49 @@ function Home() {
 
           {/* ── Tires card ─────────────────────── */}
           <div className="home-card home-card--tires">
-            <div className="card-title">Tire Pressure</div>
+            <div className="card-title">Tire Info</div>
             <div className="tire-diagram">
               <div className="tire-axle-label">Front</div>
               <div className="tire-axle">
-                <div className="tire">
-                  <div className="tire-label">LF</div>
-                  <div className="tire-value">{data.var9}</div>
-                </div>
+                <TireCell label="Left"  psiStr={data.var9}  tempStr={data.tire_lf_temp} />
                 <div className="tire-chassis"/>
-                <div className="tire">
-                  <div className="tire-label">RF</div>
-                  <div className="tire-value">{data.var10}</div>
-                </div>
+                <TireCell label="Right" psiStr={data.var10} tempStr={data.tire_rf_temp} />
               </div>
               <div className="tire-axle-label">Rear</div>
               <div className="tire-axle">
-                <div className="tire">
-                  <div className="tire-label">LR Out</div>
-                  <div className="tire-value">{data.var1}</div>
-                </div>
-                <div className="tire tire--inner">
-                  <div className="tire-label">LR In</div>
-                  <div className="tire-value">{data.var2}</div>
-                </div>
+                <TireCell label="Left-Out" psiStr={data.var1} tempStr={data.tire_lr_out_temp} />
+                <TireCell label="Left-In"  psiStr={data.var2} tempStr={data.tire_lr_in_temp}  className="tire--inner" />
                 <div className="tire-chassis"/>
-                <div className="tire tire--inner">
-                  <div className="tire-label">RR In</div>
-                  <div className="tire-value">{data.var3}</div>
-                </div>
-                <div className="tire">
-                  <div className="tire-label">RR Out</div>
-                  <div className="tire-value">{data.var4}</div>
-                </div>
+                <TireCell label="Right-In"  psiStr={data.var3} tempStr={data.tire_rr_in_temp}  className="tire--inner" />
+                <TireCell label="Right-Out" psiStr={data.var4} tempStr={data.tire_rr_out_temp} />
               </div>
+            </div>
+            <div className="tire-controls">
+              <button
+                className={`tire-btn${tireRunning ? ' tire-btn--start' : ' tire-btn--stop'}`}
+                onClick={handleTireService}
+              >
+                {tireRunning === null ? 'Service ...' : tireRunning ? 'Running - Press to Stop' : 'Stopped - Press to Start'}
+              </button>
+              <button className="tire-btn tire-btn--silence" onClick={handleSilenceAlarm}>
+                Silence Alarm
+              </button>
+            </div>
+          </div>
+
+          {/* ── Action buttons ─────────────────── */}
+          <div className="home-card home-card--actions">
+            <div className="card-title">System</div>
+            <div className="action-buttons">
+              <button className="action-btn action-btn--restart" onClick={handleRestart} disabled={restarting}>
+                {restarting ? 'Restarting' : 'Restart Program'}
+              </button>
+              <button className="action-btn action-btn--debug" onClick={() => { window.location.href = '/debug'; }}>
+                Debug
+              </button>
+              <button className="action-btn action-btn--reboot" onClick={handleReboot} disabled={rebooting}>
+                {rebooting ? 'Rebooting' : 'Reboot'}
+              </button>
             </div>
           </div>
 

@@ -13,6 +13,7 @@ packages = [
     "python-kasa>=0.5.0",  # Required for Kasa power strip control
     "pythonping==1.1.4",  # Required for internet connectivity testing
     "rvglue @ git+https://github.com/tblank1024/rvglue",
+    "docker>=6.0.0",  # Docker SDK for container management via unix socket
     #"aiofiles",
     #"aiohttp==3.8.3",
 ]
