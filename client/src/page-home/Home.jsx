@@ -20,17 +20,39 @@ function TireCell({ label, psiStr, tempStr, className }) {
   const psi  = parseTireNum(psiStr);
   const temp = parseTireNum(tempStr);
   const alert = (psi !== null && psi < 0) || (temp !== null && temp < 0);
-  const style = alert ? { color: '#ff4444' } : {};
   const dispPsi  = psi  !== null ? `${Math.abs(psi)} psi` : (psiStr  || '--');
   const dispTemp = temp !== null ? `${Math.abs(temp)}°F`  : (tempStr || '');
 
+  const classes = ['tire'];
+  if (className) classes.push(className);
+  if (alert)     classes.push('tire--alert');
+
   return (
-    <div className={`tire${className ? ' ' + className : ''}`}>
+    <div className={classes.join(' ')}>
       <div className="tire-label">{label}</div>
-      <div className="tire-reading" style={style}>{dispPsi}</div>
-      <div className="tire-reading" style={style}>{dispTemp}</div>
+      <div className="tire-reading">{dispPsi}</div>
+      <div className="tire-reading">{dispTemp}</div>
     </div>
   );
+}
+
+/** Return a Set of tire-position keys that currently have a fault (negative value). */
+function getFaultSet(d) {
+  const checks = [
+    { key: 'LF',     psi: d.var9,  temp: d.tire_lf_temp },
+    { key: 'RF',     psi: d.var10, temp: d.tire_rf_temp },
+    { key: 'RL_out', psi: d.var1,  temp: d.tire_lr_out_temp },
+    { key: 'RL_in',  psi: d.var2,  temp: d.tire_lr_in_temp  },
+    { key: 'RR_in',  psi: d.var3,  temp: d.tire_rr_in_temp  },
+    { key: 'RR_out', psi: d.var4,  temp: d.tire_rr_out_temp },
+  ];
+  const faults = new Set();
+  checks.forEach(({ key, psi, temp }) => {
+    const p = parseTireNum(psi);
+    const t = parseTireNum(temp);
+    if ((p !== null && p < 0) || (t !== null && t < 0)) faults.add(key);
+  });
+  return faults;
 }
 
 // ---------------------------------------------------------------------------
@@ -43,8 +65,11 @@ function Home() {
   const [restarting, setRestarting] = useState(false);
   const [rebooting, setRebooting] = useState(false);
   const [confirmReboot, setConfirmReboot] = useState(false);
+  const [tireFaultSilenced, setTireFaultSilenced] = useState(false);
   const serverWentDown = useRef(false);
   const tireStatusLockedUntil = useRef(0); // epoch ms — ignore poll results until this time
+  const tireFaultSilencedRef = useRef(false); // mirror for use inside setInterval closure
+  const silencedFaultSet = useRef(new Set()); // tire keys faulted when silence was pressed
 
   const getData = () => {
     fetchFromServer('/data/home')
@@ -54,6 +79,23 @@ function Home() {
           serverWentDown.current = false;
           setRestarting(false);
           setRebooting(false);
+        }
+        // Reset silenced state if faults cleared or a new (previously un-silenced) fault appears
+        if (tireFaultSilencedRef.current) {
+          const currentFaults = getFaultSet(myJson);
+          if (currentFaults.size === 0) {
+            tireFaultSilencedRef.current = false;
+            setTireFaultSilenced(false);
+          } else {
+            let hasNewFault = false;
+            currentFaults.forEach(tire => {
+              if (!silencedFaultSet.current.has(tire)) hasNewFault = true;
+            });
+            if (hasNewFault) {
+              tireFaultSilencedRef.current = false;
+              setTireFaultSilenced(false);
+            }
+          }
         }
       })
       .catch(error => {
@@ -111,6 +153,10 @@ function Home() {
   };
 
   const handleSilenceAlarm = () => {
+    const faults = getFaultSet(data);
+    silencedFaultSet.current = faults;
+    tireFaultSilencedRef.current = true;
+    setTireFaultSilenced(true);
     fetchFromServer('/api/tire/silence', { method: 'POST' })
       .catch(err => console.error('Silence error:', err));
   };
@@ -138,6 +184,96 @@ function Home() {
 
         {/* ── Main grid ──────────────────────────── */}
         <div className="home-grid">
+
+          {/* ── Tires card ─────────────────────── */}
+          <div className="home-card home-card--tires">
+            <div className="card-title">
+              {getFaultSet(data).size > 0 ? 'Tire Info (Faults)' : 'Tire Info (No Faults)'}
+            </div>
+            <div className="tire-diagram">
+              <div className="tire-axle-label">Front</div>
+              <div className="tire-axle">
+                <TireCell label="Left"  psiStr={data.var9}  tempStr={data.tire_lf_temp} />
+                <div className="tire-chassis"/>
+                <TireCell label="Right" psiStr={data.var10} tempStr={data.tire_rf_temp} />
+              </div>
+              <div className="tire-axle-label">Rear</div>
+              <div className="tire-axle">
+                <TireCell label="Left-Out" psiStr={data.var1} tempStr={data.tire_lr_out_temp} />
+                <TireCell label="Left-In"  psiStr={data.var2} tempStr={data.tire_lr_in_temp}  className="tire--inner" />
+                <div className="tire-chassis"/>
+                <TireCell label="Right-In"  psiStr={data.var3} tempStr={data.tire_rr_in_temp}  className="tire--inner" />
+                <TireCell label="Right-Out" psiStr={data.var4} tempStr={data.tire_rr_out_temp} />
+              </div>
+            </div>
+            <div className="tire-controls">
+              <button
+                className={`tire-btn${tireRunning ? ' tire-btn--start' : ' tire-btn--stop'}`}
+                onClick={handleTireService}
+              >
+                {tireRunning === null ? 'Service ...' : tireRunning ? 'Running - Press to Stop' : 'Stopped - Press to Start'}
+              </button>
+              {(() => {
+                const tireAlarmActive = getFaultSet(data).size > 0;
+                let cls = 'tire-btn';
+                let label = 'Silence Alarm';
+                if (!tireAlarmActive) {
+                  cls += ' tire-btn--silence-idle';
+                } else if (tireFaultSilenced) {
+                  cls += ' tire-btn--silence-silenced';
+                  label = 'Fault Silenced';
+                } else {
+                  cls += ' tire-btn--silence-active';
+                }
+                return (
+                  <button className={cls} onClick={handleSilenceAlarm}>
+                    {label}
+                  </button>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* ── Tanks card ─────────────────────── */}
+          <div className="home-card home-card--tanks">
+            <div className="card-title">Tanks</div>
+            <div className="tanks-grid">
+              <Gauge value={data.var17} label="Fresh"   id="fresh"   startColor="#24E9EF" endColor="#24E9EF" radius={35}/>
+              <Gauge value={data.var18} label="Propane" id="propane" startColor="#FF8C00" endColor="#FF8C00" radius={35}/>
+              <Gauge value={data.var13} label="Gray"    id="gray"    startColor="#888888" endColor="#888888" radius={35}/>
+              <Gauge value={data.var14} label="Black"   id="black"   startColor="#333333" endColor="#333333" radius={35}/>
+            </div>
+          </div>
+
+          {/* ── Power card ─────────────────────── */}
+          <div className="home-card home-card--power">
+            <div className="card-title">
+              {data.shore_power_active ? 'Power from Shore' : 'Power from Battery'}
+            </div>
+            <div className="power-row">
+              <div className="power-item power-item--solar">
+                <div className="power-item-header">
+                  <span className="power-icon">☀️</span>
+                  <span className="power-label">Solar</span>
+                </div>
+                <div className="power-value">{data.var5}</div>
+              </div>
+              <div className="power-item power-item--ac">
+                <div className="power-item-header">
+                  <span className="power-icon">🔌</span>
+                  <span className="power-label">AC Coach</span>
+                </div>
+                <div className="power-value">{data.var12}</div>
+              </div>
+              <div className="power-item power-item--dc">
+                <div className="power-item-header">
+                  <span className="power-icon">⚡</span>
+                  <span className="power-label">DC Load</span>
+                </div>
+                <div className="power-value">{data.var8}</div>
+              </div>
+            </div>
+          </div>
 
           {/* ── Battery card ───────────────────── */}
           <div className="home-card home-card--battery">
@@ -169,77 +305,6 @@ function Home() {
                   aspectRatio={0.5}
                 />
               </div>
-            </div>
-          </div>
-
-          {/* ── Power card ─────────────────────── */}
-          <div className="home-card home-card--power">
-            <div className="card-title">Power</div>
-            <div className="power-row">
-              <div className="power-item power-item--solar">
-                <div className="power-item-header">
-                  <span className="power-icon">☀️</span>
-                  <span className="power-label">Solar</span>
-                </div>
-                <div className="power-value">{data.var5}</div>
-              </div>
-              <div className="power-item power-item--ac">
-                <div className="power-item-header">
-                  <span className="power-icon">🔌</span>
-                  <span className="power-label">AC Coach</span>
-                </div>
-                <div className="power-value">{data.var12}</div>
-              </div>
-              <div className="power-item power-item--dc">
-                <div className="power-item-header">
-                  <span className="power-icon">⚡</span>
-                  <span className="power-label">DC Load</span>
-                </div>
-                <div className="power-value">{data.var8}</div>
-              </div>
-            </div>
-          </div>
-
-          {/* ── Tanks card ─────────────────────── */}
-          <div className="home-card home-card--tanks">
-            <div className="card-title">Tanks</div>
-            <div className="tanks-grid">
-              <Gauge value={data.var17} label="Fresh"   id="fresh"   startColor="#24E9EF" endColor="#24E9EF" radius={50}/>
-              <Gauge value={data.var18} label="Propane" id="propane" startColor="#FF8C00" endColor="#FF8C00" radius={50}/>
-              <Gauge value={data.var13} label="Gray"    id="gray"    startColor="#888888" endColor="#888888" radius={50}/>
-              <Gauge value={data.var14} label="Black"   id="black"   startColor="#333333" endColor="#333333" radius={50}/>
-            </div>
-          </div>
-
-          {/* ── Tires card ─────────────────────── */}
-          <div className="home-card home-card--tires">
-            <div className="card-title">Tire Info</div>
-            <div className="tire-diagram">
-              <div className="tire-axle-label">Front</div>
-              <div className="tire-axle">
-                <TireCell label="Left"  psiStr={data.var9}  tempStr={data.tire_lf_temp} />
-                <div className="tire-chassis"/>
-                <TireCell label="Right" psiStr={data.var10} tempStr={data.tire_rf_temp} />
-              </div>
-              <div className="tire-axle-label">Rear</div>
-              <div className="tire-axle">
-                <TireCell label="Left-Out" psiStr={data.var1} tempStr={data.tire_lr_out_temp} />
-                <TireCell label="Left-In"  psiStr={data.var2} tempStr={data.tire_lr_in_temp}  className="tire--inner" />
-                <div className="tire-chassis"/>
-                <TireCell label="Right-In"  psiStr={data.var3} tempStr={data.tire_rr_in_temp}  className="tire--inner" />
-                <TireCell label="Right-Out" psiStr={data.var4} tempStr={data.tire_rr_out_temp} />
-              </div>
-            </div>
-            <div className="tire-controls">
-              <button
-                className={`tire-btn${tireRunning ? ' tire-btn--start' : ' tire-btn--stop'}`}
-                onClick={handleTireService}
-              >
-                {tireRunning === null ? 'Service ...' : tireRunning ? 'Running - Press to Stop' : 'Stopped - Press to Start'}
-              </button>
-              <button className="tire-btn tire-btn--silence" onClick={handleSilenceAlarm}>
-                Silence Alarm
-              </button>
             </div>
           </div>
 

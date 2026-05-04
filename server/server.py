@@ -74,6 +74,7 @@ def _start_tire_mqtt() -> None:
                 _tire_data[name] = {
                     'psi':    payload.get('pressure_psi'),
                     'temp_f': payload.get('temp_f'),
+                    'ts':     time.time(),
                 }
         except Exception:
             pass
@@ -91,16 +92,18 @@ def _start_tire_mqtt() -> None:
     t = threading.Thread(target=_run, daemon=True)
     t.start()
 
+_TIRE_DATA_TTL = 120  # seconds — clear stale entries after 2 minutes
+
 def _tire_psi(name: str) -> str:
     d = _tire_data.get(name)
-    if d and d.get('psi') is not None:
+    if d and d.get('psi') is not None and (time.time() - d.get('ts', 0)) < _TIRE_DATA_TTL:
         return f"{d['psi']} psi"
     return '-- psi'
 
 def _tire_temp(name: str) -> str:
     d = _tire_data.get(name)
-    if d and d.get('temp_f') is not None:
-        return f"{d['temp_f']}°F"
+    if d and d.get('temp_f') is not None and (time.time() - d.get('ts', 0)) < _TIRE_DATA_TTL:
+        return f"{d['temp_f']}\u00b0F"
     return ''
 
 
@@ -1239,6 +1242,7 @@ class DataResponse(BaseModel):
     tire_lr_in_temp: str = ''
     tire_rr_in_temp: str = ''
     tire_rr_out_temp: str = ''
+    shore_power_active: bool = False
 
 
 # This is the POWER page function that is called by the front end client
@@ -1372,6 +1376,7 @@ def data_home()-> DataResponse:  # Removed async
         tire_lr_in_temp=   _tire_temp('RL_in'),
         tire_rr_in_temp=   _tire_temp('RR_in'),
         tire_rr_out_temp=  _tire_temp('RR_out'),
+        shore_power_active= (ShorePower > 0 or GenPower > 0),
     )
 
 # Debug API endpoints
@@ -1967,12 +1972,15 @@ def tire_service_control(data: Annotated[dict, Body()]) -> dict:
 
 @app.post("/api/tire/silence")
 def tire_silence_alarm() -> dict:
-    """Publish an MQTT message to silence the tire alarm."""
+    """Publish MQTT messages to silence the tire alarm for 12 hours."""
     try:
         import paho.mqtt.client as mqtt
         c = mqtt.Client()
         c.connect('localhost', 1883, 60)
+        # Notify tirelinc to suppress re-triggering for 12 hours
         c.publish('RVC/TIRE_ALARM/silence', '1')
+        # Directly stop the alarm buzzer (belt-and-suspenders if tirelinc is down)
+        c.publish('rv/tire/buzzer/stop', '1')
         c.disconnect()
         return {"success": True, "message": "Silence command sent"}
     except Exception as e:
