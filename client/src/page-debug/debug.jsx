@@ -12,6 +12,9 @@ function Debug() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [routingDiag, setRoutingDiag] = useState(null);
+  const [routingLoading, setRoutingLoading] = useState(false);
+  const [routingMessage, setRoutingMessage] = useState('');
 
   // Fetch USB port status
   const getUsbStatus = async () => {
@@ -211,6 +214,51 @@ function Debug() {
         console.error('Error controlling Synology NAS:', error);
         setSynologyMessage(`Error communicating with Synology NAS: ${error.message}`);
       }
+    }
+  };
+
+  // Run routing diagnostics
+  const runRoutingDiag = async () => {
+    setRoutingLoading(true);
+    setRoutingMessage('Running routing diagnostics...');
+    try {
+      const response = await fetch(`${getServerUrl()}/api/debug/routing/diagnose`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      setRoutingDiag(data);
+      setRoutingMessage(data.issues && data.issues.length > 0
+        ? `Found ${data.issues.length} issue(s)`
+        : 'No routing issues detected');
+    } catch (error) {
+      setRoutingMessage('Diagnostics failed: ' + error.message);
+    } finally {
+      setRoutingLoading(false);
+    }
+  };
+
+  // Apply routing fixes
+  const applyRoutingFixes = async () => {
+    if (!window.confirm('Apply automatic routing fixes? This requires NET_ADMIN capability.')) return;
+    setRoutingLoading(true);
+    setRoutingMessage('Applying fixes...');
+    try {
+      const response = await fetch(`${getServerUrl()}/api/debug/routing/fix`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      setRoutingDiag(data);
+      setRoutingMessage(data.fixes_applied && data.fixes_applied.length > 0
+        ? `Applied ${data.fixes_applied.length} fix(es)`
+        : 'No fixes needed');
+    } catch (error) {
+      setRoutingMessage('Fix failed: ' + error.message);
+    } finally {
+      setRoutingLoading(false);
     }
   };
 
@@ -433,6 +481,92 @@ function Debug() {
               </div>
             </div>
           </div>
+        </div>
+        {/* Routing Diagnostics Section */}
+        <div className="debug-section">
+          <h2>5G / Modem Routing Diagnostics</h2>
+          <div style={{ marginBottom: '12px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <button
+              className="action-button status-button"
+              onClick={runRoutingDiag}
+              disabled={routingLoading}
+            >
+              {routingLoading ? 'Running...' : 'Run Diagnostics'}
+            </button>
+            {routingDiag && routingDiag.issues && routingDiag.issues.length > 0 && (
+              <button
+                className="action-button power-on-button"
+                onClick={applyRoutingFixes}
+                disabled={routingLoading}
+              >
+                Apply Fixes
+              </button>
+            )}
+          </div>
+
+          {routingMessage && (
+            <div className="message-box" style={{ marginBottom: '12px' }}>
+              {routingMessage}
+            </div>
+          )}
+
+          {routingDiag && (
+            <div>
+              {/* Summary badges */}
+              <div style={{ marginBottom: '10px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {routingDiag.modem_interfaces && routingDiag.modem_interfaces.map(iface => (
+                  <span key={iface.name} style={{
+                    background: iface.up && iface.ip ? '#4CAF50' : '#f44336',
+                    color: '#fff', padding: '3px 8px', borderRadius: '4px', fontSize: '12px'
+                  }}>
+                    {iface.name}: {iface.up ? 'UP' : 'DOWN'}{iface.ip ? ` · ${iface.ip}` : ''}
+                  </span>
+                ))}
+                {routingDiag.issues && routingDiag.issues.map(issue => (
+                  <span key={issue} style={{
+                    background: '#ff9800', color: '#fff',
+                    padding: '3px 8px', borderRadius: '4px', fontSize: '12px'
+                  }}>
+                    ⚠ {issue}
+                  </span>
+                ))}
+                {routingDiag.fixes_applied && routingDiag.fixes_applied.map((fix, i) => (
+                  <span key={i} style={{
+                    background: '#2196F3', color: '#fff',
+                    padding: '3px 8px', borderRadius: '4px', fontSize: '12px'
+                  }}>
+                    ✓ {fix}
+                  </span>
+                ))}
+              </div>
+
+              {/* Section details */}
+              {routingDiag.sections && routingDiag.sections.map((section, si) => (
+                <details key={si} style={{ marginBottom: '6px' }}>
+                  <summary style={{ cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>
+                    {section.title}
+                    {section.lines && section.lines.some(l => l.type === 'warn') && (
+                      <span style={{ color: '#f44336', marginLeft: '8px' }}>⚠</span>
+                    )}
+                  </summary>
+                  <div style={{ paddingLeft: '16px', marginTop: '4px' }}>
+                    {section.lines && section.lines.map((line, li) => (
+                      <div key={li} style={{
+                        fontSize: '12px', fontFamily: 'monospace',
+                        color: line.type === 'ok' ? '#4CAF50'
+                          : line.type === 'warn' ? '#f44336'
+                          : '#888',
+                        marginBottom: '2px'
+                      }}>
+                        {line.type === 'ok' ? '[OK]  ' : line.type === 'warn' ? '[!!]  ' : '[--]  '}
+                        {line.msg}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

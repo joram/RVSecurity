@@ -748,6 +748,41 @@ def update_current_internet_connection(port, action):
     _save_internet_state(current_internet_connection)
     print(f"INFO: Current internet connection updated to: {current_internet_connection}")
 
+# Candidate paths for pi5connect.sh (dev path first, then installed path)
+_PI5CONNECT_PATHS = [
+    "/home/tblank/code/tblank1024/rv/raspap/pi5connect.sh",
+    "/usr/local/sbin/pi5connect.sh",
+]
+
+def _trigger_pi5connect():
+    """Fire pi5connect.sh in the background to rescan uplinks and update iptables/routing.
+
+    Uses nsenter when running in a container so the script executes in the
+    host's network/mount namespace.  Falls back to a direct exec on the host.
+    """
+    script = next((p for p in _PI5CONNECT_PATHS if os.path.isfile(p)), None)
+    if not script:
+        print("INFO: pi5connect.sh not found -- skipping automatic routing reconfiguration")
+        return
+
+    def _run():
+        try:
+            # nsenter -t 1 runs the command in the host's namespaces (works when
+            # the container has pid:host and is privileged).  If nsenter isn't
+            # available or fails, fall back to running the script directly.
+            cmd = _nsenter_cmd(["bash", script])
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if result.returncode != 0:
+                # nsenter failed (probably not in a container) — try directly
+                result = subprocess.run(["bash", script], capture_output=True, text=True, timeout=30)
+            print(f"INFO: pi5connect.sh exited {result.returncode}")
+            if result.stdout.strip():
+                print(f"INFO: pi5connect.sh stdout: {result.stdout.strip()[-500:]}")
+        except Exception as exc:
+            print(f"WARNING: _trigger_pi5connect failed: {exc}")
+
+    threading.Thread(target=_run, daemon=True).start()
+
 class InternetPowerData(BaseModel):
     port: int  # 1-4 for specific ports, 0 for all ports off
     action: str  # 'on' or 'off'
@@ -1076,6 +1111,7 @@ def internet_power_control(data: Annotated[InternetPowerData, Body()]) -> Intern
             if result:
                 time.sleep(USB_HUB_PORT_DELAY_ALL_OFF)  # Allow time for all ports to turn off
                 update_current_internet_connection(0, "off")  # Update state
+                _trigger_pi5connect()  # Reconfigure routing immediately
                 
                 success_msg = "All USB ports powered off"
                 if not kasa_success:
@@ -1132,6 +1168,7 @@ def internet_power_control(data: Annotated[InternetPowerData, Body()]) -> Intern
             
             if result:
                 update_current_internet_connection(data.port, data.action)  # Update state
+                _trigger_pi5connect()  # Reconfigure routing immediately
                 
                 success_msg = f"USB port {data.port} {action_msg} successfully"
                 if kasa_success and data.kasaPort:
@@ -1787,6 +1824,29 @@ async def debug_synology_control(action: str):
             "message": f"Error controlling Synology NAS: {str(e)}"
         }
 
+
+# ---------------------------------------------------------------------------
+# Routing Diagnostics endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/debug/routing/diagnose")
+def routing_diagnose() -> dict:
+    """Run 5G/modem routing diagnostics and return structured results."""
+    try:
+        import routing_diag
+        return routing_diag.diagnose_to_dict(verbose=False, do_fixes=False)
+    except Exception as e:
+        return {"success": False, "issues": [], "sections": [], "error": str(e)}
+
+
+@app.post("/api/debug/routing/fix")
+def routing_fix() -> dict:
+    """Run routing diagnostics and apply fixes (requires root / NET_ADMIN capability)."""
+    try:
+        import routing_diag
+        return routing_diag.diagnose_to_dict(verbose=False, do_fixes=True, dry_run=False)
+    except Exception as e:
+        return {"success": False, "issues": [], "sections": [], "fixes_applied": [], "error": str(e)}
 
 
 @app.get("/status")

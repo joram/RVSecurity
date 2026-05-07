@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y tzdata
 # Install USB management tools for cellular modem handling
 RUN apt-get update && apt-get install -y usbutils modemmanager
 # Install network tools for internet connectivity testing
-RUN apt-get update && apt-get install -y iputils-ping iproute2 curl
+RUN apt-get update && apt-get install -y iputils-ping iproute2 curl net-tools iptables nftables
 # Create PST8PDT timezone link to handle Kasa device timezone format
 RUN ln -sf /usr/share/zoneinfo/America/Los_Angeles /usr/share/zoneinfo/PST8PDT
 
@@ -59,6 +59,9 @@ RUN SITE=$(python3 -c "import site; print(site.getsitepackages()[0])") && \
     echo "import kasa_hs300_patches; kasa_hs300_patches.apply()" > $SITE/kasa_hs300_patches.pth
 # Copy USB modem manager for cellular modem handling
 COPY server/usb_modem_manager.py server/.
+# Copy routing diagnostics tool — canonical source is raspap/routing-diag.py in the rv repo.
+# The rv additional_context in docker-compose.yml maps to /home/tblank/code/tblank1024/rv.
+COPY --from=rv raspap/routing-diag.py server/routing_diag.py
 # Copy USB hub controller module
 COPY usbhub_ascii.py server/.
 # Copy WiFi bridge control script for RP Zero 2W configuration
