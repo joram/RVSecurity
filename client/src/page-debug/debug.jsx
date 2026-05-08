@@ -484,7 +484,7 @@ function Debug() {
         </div>
         {/* Routing Diagnostics Section */}
         <div className="debug-section">
-          <h2>5G / Modem Routing Diagnostics</h2>
+          <h2>Internet Connection Diagnostics</h2>
           <div style={{ marginBottom: '12px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <button
               className="action-button status-button"

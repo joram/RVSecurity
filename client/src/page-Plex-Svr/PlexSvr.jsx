@@ -295,7 +295,6 @@ const PlexSvr = () => {
           // Don't set the radio button here - let getScheduledTime determine if it's timed or manual
           setMessage("Ready");
         } else {
-          setSelectedOption('standby');
           // Check if ethernet is active by parsing the message text
           let ethernetActive = false;
           if (result.message) {
@@ -307,9 +306,11 @@ const PlexSvr = () => {
           }
           
           if (ethernetActive) {
+            setSelectedOption('standby');
             setMessage("Ready");
           } else {
-            setMessage("Server off — must manually restart server (behind TV)");
+            setSelectedOption('off');
+            setMessage("Server off — must manually restart Synology server (behind TV)");
             // Turn on entertainment system outlets when ethernet is unavailable (manual restart needed)
             controlKasaEntertainmentSystem('on');
           }
@@ -539,7 +540,8 @@ const PlexSvr = () => {
           )}
           
           {!isLoading && message && (
-            <Message negative={message.includes('must be restarted manually')}>
+            <Message warning={selectedOption === 'off'}>
+              {selectedOption === 'off' && <Icon name='arrow right' />}
               {message}
               {timeRemaining > 0 && (
                 <div style={{ marginTop: '10px', fontWeight: 'bold' }}>
@@ -592,7 +594,7 @@ const PlexSvr = () => {
             </Form.Field>
             <Form.Field>
               <Radio
-                label='On until I turn off'
+                label='On until Standby selected'
                 name='plexServerOption'
                 value='manual'
                 checked={selectedOption === 'manual'}
